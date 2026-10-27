@@ -1,7 +1,7 @@
 import { GalleryError } from './errors.ts';
 
 // Record requests go straight from the browser to the public data owner.
-export async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
+export async function getJson<T>(url: string, signal: AbortSignal, notFound?: string): Promise<T> {
   let response: Response;
   try {
     response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(25_000)]) });
@@ -16,9 +16,14 @@ export async function getJson<T>(url: string, signal: AbortSignal): Promise<T> {
       throw new GalleryError(
         'This account’s data server is busy. Please give it a moment, then try again.',
       );
-    if (response.status === 404)
+    if (
+      response.status === 404 ||
+      (notFound &&
+        response.status === 400 &&
+        (await response.json().catch(() => null))?.error === 'RecordNotFound')
+    )
       throw new GalleryError(
-        'We couldn’t find that account. Check the DID or handle and try again.',
+        notFound || 'We couldn’t find that account. Check the DID or handle and try again.',
       );
     throw new GalleryError(
       `This account’s data server couldn’t complete the request (${response.status}). Please try again.`,

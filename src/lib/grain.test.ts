@@ -253,6 +253,8 @@ describe('progressive metadata loading', () => {
       exif?: boolean;
       wrongOwner?: boolean;
       malformedView?: boolean;
+      missingGallery?: number;
+      wrongGallery?: boolean;
     } = {},
   ) {
     const requests: URL[] = [];
@@ -267,6 +269,18 @@ describe('progressive metadata loading', () => {
           'social.grain.gallery',
           'Do not scan photo/item/EXIF history',
         );
+        if (url.pathname.endsWith('/com.atproto.repo.getRecord')) {
+          if (options.missingGallery)
+            return json({ error: 'RecordNotFound' }, options.missingGallery);
+          return json(
+            entry(
+              options.wrongGallery
+                ? `at://did:plc:bbbbbbbbbbbbbbbbbbbbbbbb/social.grain.gallery/gallery1-2`
+                : `${galleryUri}-2`,
+              { title: 'Gallery 2', createdAt: '2026-10-01T12:00:00Z' },
+            ),
+          );
+        }
         assert.equal(url.searchParams.get('limit'), String(GALLERY_PAGE_SIZE));
         const cursor = url.searchParams.get('cursor') || '';
         if (options.failPage === cursor) return json({}, 503);
@@ -330,6 +344,37 @@ describe('progressive metadata loading', () => {
     assert.equal(requests.filter((url) => url.hostname === 'photos.example').length, 1);
     assert.equal(requests.filter((url) => url.hostname === 'grain.social').length, 1);
     assert(!requests.some((url) => url.searchParams.has('cursor')));
+  });
+  it('loads a linked gallery directly without listing or paging through the portfolio', async () => {
+    const requests = mockRepository();
+    const portfolio = await loadPortfolio(TEST_DID, new AbortController().signal, 'gallery1-2');
+    assert.equal(portfolio.photos.length, 1);
+    assert.equal(portfolio.photos[0].id, `at://${TEST_DID}/social.grain.photo/photo-2`);
+    assert.equal(portfolio.photos[0].galleryId, `${galleryUri}-2`);
+    assert.equal(portfolio.cursor, undefined);
+    assert.equal(requests.length, 3);
+    assert(!requests.some((url) => url.pathname.endsWith('/com.atproto.repo.listRecords')));
+    const record = requests.find((url) => url.pathname.endsWith('/com.atproto.repo.getRecord'))!;
+    assert.equal(record.searchParams.get('repo'), TEST_DID);
+    assert.equal(record.searchParams.get('collection'), 'social.grain.gallery');
+    assert.equal(record.searchParams.get('rkey'), 'gallery1-2');
+  });
+  it('rejects a linked gallery returned for another owner before requesting its images', async () => {
+    const requests = mockRepository({ wrongGallery: true });
+    await assert.rejects(
+      loadPortfolio(TEST_DID, new AbortController().signal, 'gallery1-2'),
+      /doesn’t belong/,
+    );
+    assert(!requests.some((url) => url.hostname === 'grain.social'));
+  });
+  it('reports a removed gallery without claiming that the account is missing', async () => {
+    for (const status of [400, 404]) {
+      mockRepository({ missingGallery: status });
+      await assert.rejects(
+        loadPortfolio(TEST_DID, new AbortController().signal, 'gallery1-2'),
+        /gallery is no longer available/,
+      );
+    }
   });
   it('gets another metadata page only when explicitly requested', async () => {
     const requests = mockRepository();

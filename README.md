@@ -68,6 +68,18 @@ Two swatches beside the arrows let you choose a gray (`#777`) or white (`#fff`) 
 
 The gray is close to L*50, the neutral middle gray recommended in [FADGI’s photo-viewing guidance, section 2.6.2](https://www.digitizationguidelines.gov/guidelines/FADGITechnicalGuidelinesforDigitizingCulturalHeritageMaterials_ThirdEdition_05092023.pdf#page=24). The white is plain, untinted white, also used in [Adobe Spectrum’s neutral palette](https://github.com/adobe/spectrum-design-data/blob/main/docs/markdown/tokens/color-palette.md). There is no single white value required for web lightboxes.
 
+## Share a photo
+
+Open a photo and copy the URL from your address bar. It includes the account’s DID, gallery key, and photo key:
+
+```text
+/{did}#gallery={gallery-key}&photo={photo-key}
+```
+
+The URL follows the selected photo as you use the arrows or swipe. Back closes the lightbox in one step; Forward opens it again. Escape, the close button, and a click outside the lightbox also return to the portfolio. Refreshing or opening a copied link opens the selected photo automatically. These links work under GitHub Pages project paths too.
+
+A shared link loads only its named gallery first, so an older photo can open without paging through the account’s history. You can move through that gallery’s photos, then close the lightbox to browse the full portfolio. When you open a photo from the portfolio, navigation continues across its progressively loaded galleries. Missing photos or galleries show an error with Retry and View portfolio options.
+
 ## Fonts
 
 Photoshow uses two fonts from the [Atkinson Hyperlegible family](https://www.brailleinstitute.org/freefont/). The links below point to the original font projects and the license files included with the site.
@@ -87,6 +99,8 @@ Both font files are unchanged. Each font’s original copyright notice (2020–2
 
 The browser finds the account’s data server from its DID document. It reads `social.grain.gallery` records in pages of three using `com.atproto.repo.listRecords`. Grain’s public `social.grain.unspecced.getGallery` API supplies the photos and camera details for those galleries. The app does not download the account’s entire photo or EXIF history.
 
+Photo links use `com.atproto.repo.getRecord` to fetch the named gallery record directly, followed by Grain’s gallery API. Both requests use the account from the URL. Full portfolios and directly opened galleries have separate five-minute caches.
+
 The next page loads near the bottom of the gallery, or when you move past the last loaded photo in the lightbox. Failed requests keep the photos already shown and let you retry. The app skips duplicates and checks for repeated pages. It relies on Grain’s public API and the account’s data server being available. The data server must allow requests from other websites (CORS).
 
 Only public, published galleries are shown. Drafts, unattached uploads, private galleries, and private group spaces are not included. Grain stores EXIF numbers at a scale of 1,000,000, including ISO; the app converts them for display.
@@ -105,9 +119,9 @@ Current JavaScript sizes:
 
 | JavaScript                      | Uncompressed |     gzip |   Brotli |
 | ------------------------------- | -----------: | -------: | -------: |
-| Home                            |     22.26 KB |  8.63 KB |  7.73 KB |
-| Gallery, before opening a photo |     43.15 KB | 16.44 KB | 14.72 KB |
-| Including the lightbox          |     50.42 KB | 19.12 KB | 17.01 KB |
+| Home                            |     22.29 KB |  8.65 KB |  7.73 KB |
+| Gallery, before opening a photo |     46.03 KB | 17.29 KB | 15.46 KB |
+| Including the lightbox          |     52.68 KB | 19.87 KB | 17.66 KB |
 
 Fonts and CSS are separate from these figures. Actual download sizes depend on the host’s compression settings. Run `npm run size` to update the report. The build fails if the gallery JavaScript exceeds 18 KB with gzip, or all JavaScript exceeds 20 KB with gzip.
 
@@ -119,9 +133,9 @@ npm run check
 
 This runs ESLint, including Lit’s recommended rules; Stylelint; Prettier; tests; TypeScript; the production build; size limits; and production checks. Use `npm run format` to format the source, or `npm run lint` to run just the linters and format check. The GitHub Pages workflow also passes `actionlint`.
 
-Tests cover account lookup, page loading, layout, image loading, lightbox controls, swipe and tap gestures, saved choices, font loading, and Pages routes. They also check failures, retries, and cancelling requests. Happy DOM runs the checks without opening a browser.
+Tests cover account lookup, page loading, layout, image loading, lightbox controls, swipe and tap gestures, saved choices, font loading, Pages routes, shared photo links, and Back/Forward navigation. They also check failures, retries, and cancelling requests. Happy DOM runs the checks without opening a browser.
 
-The production checks run the built JavaScript with sample account data, both from the home page and through a direct gallery link. They check font readiness, deferred Mono loading, included licenses, the Pages redirect, and lightbox behavior.
+The production checks run the built JavaScript with sample account data from the home page, a direct portfolio link, and a shared photo link. They check font readiness, deferred Mono loading, included licenses, the Pages redirect, lightbox behavior, and browser history.
 
 ## License
 

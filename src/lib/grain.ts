@@ -1,6 +1,7 @@
 import { GalleryError } from './errors.ts';
 import { getJson } from './request.ts';
 import { resolveIdentity } from './identity.ts';
+import { validRecordKey } from './photo-route.ts';
 export { GalleryError } from './errors.ts';
 export { normalizeActor, didDocumentUrl } from './actor.ts';
 export { resolveIdentity } from './identity.ts';
@@ -252,6 +253,7 @@ async function loadGallery(
   const result = await getJson<{ gallery: GalleryView }>(
     `https://grain.social/xrpc/social.grain.unspecced.getGallery?${new URLSearchParams({ gallery: record.uri })}`,
     signal,
+    'This gallery is no longer available. It may have been removed.',
   );
   const view = result.gallery;
   if (!view || view.uri !== record.uri || !Array.isArray(view.items))
@@ -325,9 +327,28 @@ export async function loadPortfolioPage(
   return { photos, cursor: page.cursor || undefined };
 }
 
-export async function loadPortfolio(actor: string, signal: AbortSignal): Promise<Portfolio> {
+export async function loadPortfolio(
+  actor: string,
+  signal: AbortSignal,
+  gallery?: string,
+): Promise<Portfolio> {
+  if (gallery !== undefined && !validRecordKey(gallery))
+    throw new GalleryError('This photo link is incomplete or invalid.');
   const identity = await resolveIdentity(actor, signal);
-  const page = await loadPortfolioPage(identity, undefined, signal);
+  let page: PortfolioPage;
+  if (gallery) {
+    const record = await getJson<RecordEntry<GalleryRecord>>(
+      `${identity.pds}/xrpc/com.atproto.repo.getRecord?${new URLSearchParams({ repo: identity.did, collection: 'social.grain.gallery', rkey: gallery })}`,
+      signal,
+      'This gallery is no longer available. It may have been removed.',
+    );
+    if (
+      record.uri !== `at://${identity.did}/social.grain.gallery/${gallery}` ||
+      typeof record.value?.title !== 'string'
+    )
+      throw new GalleryError('The returned gallery doesn’t belong to this photo link.');
+    page = { photos: await loadGallery(identity, record, signal) };
+  } else page = await loadPortfolioPage(identity, undefined, signal);
   return { identity, ...page, seenCursors: page.cursor ? [page.cursor] : [] };
 }
 

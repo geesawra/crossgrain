@@ -31,21 +31,21 @@ export class PhotoLightbox extends PhotoElement {
   declare private showDetails: boolean;
   declare private background: Background;
   declare private revealed: boolean;
-  private dialog = createRef<HTMLDialogElement>();
-  private image = createRef<PhotoImage>();
-  private canvas = createRef<HTMLDivElement>();
-  private details = createRef<HTMLDivElement>();
-  private backgrounds = createRef<HTMLFieldSetElement>();
-  private detailsId = `photo-details-${++detailsSequence}`;
-  private previousOverflow = '';
-  private returnFocus?: HTMLElement;
-  private resetScroll = false;
-  private swipe?: { id: number; x: number; y: number; time: number };
-  private ignoreClickUntil = 0;
-  private viewportChanged = () => {
+  #dialog = createRef<HTMLDialogElement>();
+  #image = createRef<PhotoImage>();
+  #canvas = createRef<HTMLDivElement>();
+  #details = createRef<HTMLDivElement>();
+  #backgrounds = createRef<HTMLFieldSetElement>();
+  #detailsId = `photo-details-${++detailsSequence}`;
+  #previousOverflow = '';
+  #returnFocus?: HTMLElement;
+  #resetScroll = false;
+  #swipe?: { id: number; x: number; y: number; time: number };
+  #ignoreClickUntil = 0;
+  #viewportChanged = () => {
     const zoomed = (window.visualViewport?.scale || 1) > 1.01;
-    if (this.canvas.value) this.canvas.value.style.touchAction = zoomed ? 'auto' : '';
-    if (zoomed) this.cancelSwipe();
+    if (this.#canvas.value) this.#canvas.value.style.touchAction = zoomed ? 'auto' : '';
+    if (zoomed) this.#cancelSwipe();
   };
 
   constructor() {
@@ -61,8 +61,8 @@ export class PhotoLightbox extends PhotoElement {
 
   present(state: LightboxState) {
     if (!this.opened) {
-      this.previousOverflow = document.body.style.overflow;
-      this.returnFocus =
+      this.#previousOverflow = document.body.style.overflow;
+      this.#returnFocus =
         document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
       document.body.style.overflow = 'hidden';
       this.showDetails = true;
@@ -74,48 +74,48 @@ export class PhotoLightbox extends PhotoElement {
         /* Use the session choice. */
       }
       this.background = preferredBackground;
-      window.visualViewport?.addEventListener('resize', this.viewportChanged);
-      this.resetScroll = true;
+      window.visualViewport?.addEventListener('resize', this.#viewportChanged);
+      this.#resetScroll = true;
       this.revealed = false;
     }
     if (this.state?.photo.id !== state.photo.id) {
-      this.resetScroll = true;
+      this.#resetScroll = true;
       this.revealed = false;
-      this.swipe = undefined;
+      this.#swipe = undefined;
     }
     this.state = state;
   }
   dismiss() {
     if (this.opened) {
-      this.dialog.value?.close();
-      this.closed();
+      this.#dialog.value?.close();
+      this.#closed();
     }
   }
-  private closed() {
+  #closed() {
     if (!this.opened) return;
     this.opened = false;
-    this.swipe = undefined;
-    window.visualViewport?.removeEventListener('resize', this.viewportChanged);
-    document.body.style.overflow = this.previousOverflow;
-    if (this.returnFocus?.isConnected) this.returnFocus.focus({ preventScroll: true });
+    this.#swipe = undefined;
+    window.visualViewport?.removeEventListener('resize', this.#viewportChanged);
+    document.body.style.overflow = this.#previousOverflow;
+    if (this.#returnFocus?.isConnected) this.#returnFocus.focus({ preventScroll: true });
     this.dispatchEvent(new Event('photo-close', { bubbles: true }));
   }
   protected updated() {
     if (!this.opened || !this.state) return;
-    this.image.value?.configure(this.state.photo, true, true);
-    if (this.resetScroll && this.details.value) {
-      this.details.value.scrollTop = 0;
-      this.resetScroll = false;
+    this.#image.value?.configure(this.state.photo, true, true);
+    if (this.#resetScroll && this.#details.value) {
+      this.#details.value.scrollTop = 0;
+      this.#resetScroll = false;
     }
-    if (this.dialog.value && !this.dialog.value.open) {
-      this.dialog.value.showModal();
-      this.dialog.value
+    if (this.#dialog.value && !this.#dialog.value.open) {
+      this.#dialog.value.showModal();
+      this.#dialog.value
         .querySelector<HTMLButtonElement>('.lightbox-close')
         ?.focus({ preventScroll: true });
     }
-    this.viewportChanged();
+    this.#viewportChanged();
   }
-  private navigate(name: 'photo-previous' | 'photo-next') {
+  #navigate(name: 'photo-previous' | 'photo-next') {
     if (
       name === 'photo-previous'
         ? this.state?.canPrevious
@@ -123,7 +123,7 @@ export class PhotoLightbox extends PhotoElement {
     )
       this.dispatchEvent(new Event(name, { bubbles: true }));
   }
-  private backgroundChanged(event: Event) {
+  #backgroundChanged(event: Event) {
     const value = (event.currentTarget as HTMLInputElement).value;
     if (value !== 'gray' && value !== 'white') return;
     this.background = preferredBackground = value;
@@ -133,24 +133,24 @@ export class PhotoLightbox extends PhotoElement {
       /* Keep the session choice. */
     }
   }
-  private keydown(event: KeyboardEvent) {
-    if (this.backgrounds.value?.contains(event.target as Node)) return;
+  #keydown(event: KeyboardEvent) {
+    if (this.#backgrounds.value?.contains(event.target as Node)) return;
     if (event.key === 'ArrowLeft' && this.state?.canPrevious) {
       event.preventDefault();
-      this.navigate('photo-previous');
+      this.#navigate('photo-previous');
     }
     if (event.key === 'ArrowRight' && this.state?.canNext && !this.state.loadingNext) {
       event.preventDefault();
-      this.navigate('photo-next');
+      this.#navigate('photo-next');
     }
   }
-  private cancelSwipe() {
-    this.swipe = undefined;
-    this.ignoreClickUntil = performance.now() + 350;
+  #cancelSwipe() {
+    this.#swipe = undefined;
+    this.#ignoreClickUntil = performance.now() + 350;
   }
-  private pointerDown(event: PointerEvent) {
+  #pointerDown(event: PointerEvent) {
     if (event.pointerType !== 'touch') return;
-    this.swipe = undefined;
+    this.#swipe = undefined;
     if (
       !event.isPrimary ||
       !this.opened ||
@@ -158,17 +158,22 @@ export class PhotoLightbox extends PhotoElement {
       (event.target as HTMLElement).closest('button, a, input')
     )
       return;
-    this.ignoreClickUntil = 0;
-    this.swipe = { id: event.pointerId, x: event.clientX, y: event.clientY, time: event.timeStamp };
+    this.#ignoreClickUntil = 0;
+    this.#swipe = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      time: event.timeStamp,
+    };
   }
-  private pointerUp(event: PointerEvent) {
-    const start = this.swipe;
+  #pointerUp(event: PointerEvent) {
+    const start = this.#swipe;
     if (!start || start.id !== event.pointerId) return;
-    this.swipe = undefined;
+    this.#swipe = undefined;
     const dx = event.clientX - start.x,
       dy = event.clientY - start.y;
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10 || event.timeStamp - start.time > 800)
-      this.cancelSwipe();
+      this.#cancelSwipe();
     if (
       !this.opened ||
       (window.visualViewport?.scale || 1) > 1.01 ||
@@ -177,19 +182,19 @@ export class PhotoLightbox extends PhotoElement {
       event.timeStamp - start.time > 800
     )
       return;
-    this.navigate(dx < 0 ? 'photo-next' : 'photo-previous');
+    this.#navigate(dx < 0 ? 'photo-next' : 'photo-previous');
   }
-  private imageClick(event: MouseEvent) {
+  #imageClick(event: MouseEvent) {
     if (
-      performance.now() < this.ignoreClickUntil ||
+      performance.now() < this.#ignoreClickUntil ||
       (event.target as HTMLElement).tagName !== 'IMG'
     )
       return;
-    this.toggleDetails();
+    this.#toggleDetails();
   }
-  private toggleDetails() {
-    if (this.showDetails && this.details.value?.contains(document.activeElement)) {
-      this.dialog.value
+  #toggleDetails() {
+    if (this.showDetails && this.#details.value?.contains(document.activeElement)) {
+      this.#dialog.value
         ?.querySelector<HTMLButtonElement>('.lightbox-details-toggle')
         ?.focus({ preventScroll: true });
     }
@@ -224,21 +229,21 @@ export class PhotoLightbox extends PhotoElement {
       : [];
     return html`<dialog
       class="lightbox"
-      ${ref(this.dialog)}
+      ${ref(this.#dialog)}
       aria-label=${photo?.caption || photo?.title || 'Photograph'}
       @close=${() => {
-        if (!this.dialog.value?.open) this.closed();
+        if (!this.#dialog.value?.open) this.#closed();
       }}
       @cancel=${(event: Event) => {
         event.preventDefault();
         this.dismiss();
       }}
       @click=${(event: MouseEvent) => {
-        if (event.target === this.dialog.value) this.dismiss();
+        if (event.target === this.#dialog.value) this.dismiss();
       }}
-      @keydown=${this.keydown}
+      @keydown=${this.#keydown}
       @pointerdown=${(event: PointerEvent) => {
-        if (event.pointerType === 'touch' && !event.isPrimary) this.cancelSwipe();
+        if (event.pointerType === 'touch' && !event.isPrimary) this.#cancelSwipe();
       }}
     >
       <div
@@ -249,7 +254,7 @@ export class PhotoLightbox extends PhotoElement {
             type="button"
             aria-label="Previous photo"
             ?disabled=${!state?.canPrevious}
-            @click=${() => this.navigate('photo-previous')}
+            @click=${() => this.#navigate('photo-previous')}
           >
             ←
           </button>
@@ -257,11 +262,11 @@ export class PhotoLightbox extends PhotoElement {
             type="button"
             aria-label="Next photo"
             ?disabled=${!state?.canNext || state.loadingNext}
-            @click=${() => this.navigate('photo-next')}
+            @click=${() => this.#navigate('photo-next')}
           >
             →
           </button>
-          <fieldset class="lightbox-background" ${ref(this.backgrounds)}>
+          <fieldset class="lightbox-background" ${ref(this.#backgrounds)}>
             <legend class="sr-only">Image background</legend>
             <div class="lightbox-background-options">
               ${(['gray', 'white'] as const).map(
@@ -270,10 +275,10 @@ export class PhotoLightbox extends PhotoElement {
                     <input
                       class="sr-only"
                       type="radio"
-                      name=${`${this.detailsId}-background`}
+                      name=${`${this.#detailsId}-background`}
                       value=${value}
                       .checked=${this.background === value}
-                      @change=${this.backgroundChanged}
+                      @change=${this.#backgroundChanged}
                     />
                     <span
                       class=${`lightbox-background-swatch lightbox-background-${value}`}
@@ -291,8 +296,8 @@ export class PhotoLightbox extends PhotoElement {
           type="button"
           class="lightbox-details-toggle"
           aria-expanded=${String(this.showDetails)}
-          aria-controls=${this.detailsId}
-          @click=${this.toggleDetails}
+          aria-controls=${this.#detailsId}
+          @click=${this.#toggleDetails}
           >${this.showDetails ? 'Hide details' : 'Show details'}</button
         >
         <button
@@ -306,13 +311,13 @@ export class PhotoLightbox extends PhotoElement {
         </button>
         <div
           class="lightbox-image"
-          ${ref(this.canvas)}
+          ${ref(this.#canvas)}
           data-background=${this.background}
-          @pointerdown=${this.pointerDown}
-          @pointerup=${this.pointerUp}
-          @pointercancel=${this.cancelSwipe}
+          @pointerdown=${this.#pointerDown}
+          @pointerup=${this.#pointerUp}
+          @pointercancel=${this.#cancelSwipe}
           @lostpointercapture=${() => {
-            this.swipe = undefined;
+            this.#swipe = undefined;
           }}
         >
           ${
@@ -331,8 +336,8 @@ export class PhotoLightbox extends PhotoElement {
                         </button>
                       </div>`
                     : html`<photo-image
-                        ${ref(this.image)}
-                        @click=${this.imageClick}
+                        ${ref(this.#image)}
+                        @click=${this.#imageClick}
                       ></photo-image>`,
                 )
               : nothing
@@ -340,8 +345,8 @@ export class PhotoLightbox extends PhotoElement {
         </div>
         <div
           class="lightbox-details"
-          ${ref(this.details)}
-          id=${this.detailsId}
+          ${ref(this.#details)}
+          id=${this.#detailsId}
           role="region"
           aria-label="Photo details"
           tabindex="0"

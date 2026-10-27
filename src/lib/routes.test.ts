@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, describe, it } from 'node:test';
 import { Window } from 'happy-dom';
 import { actorFromPath, galleryPath, restorePageRoute } from './routes.ts';
+import { photoFromHash, photoPath } from './photo-route.ts';
 
 const window = new Window({ url: 'https://photographer.github.io/photoshow/' });
 Object.defineProperty(globalThis, 'window', { configurable: true, value: window });
@@ -28,7 +29,7 @@ describe('static site routes', () => {
   it('restores direct gallery links without losing encoded DIDs, queries, or fragments', () => {
     for (const base of ['/', '/photoshow/', '/photoshow']) {
       const root = base.endsWith('/') ? base : `${base}/`;
-      const target = `${galleryPath('did:web:photos.example%3A8443:alice', base)}?view=all#photo`;
+      const target = `${galleryPath('did:web:photos.example%3A8443:alice', base)}?view=all#gallery=gallery1&photo=photo2`;
       window.history.replaceState(
         {},
         '',
@@ -67,5 +68,49 @@ describe('static site routes', () => {
     window.history.replaceState({}, '', '/photoshow/');
     restorePageRoute('/photoshow/');
     assert.equal(window.location.pathname, '/photoshow/');
+  });
+});
+
+describe('lightbox links', () => {
+  it('uses stable record keys and round-trips encoded characters and web DIDs', () => {
+    for (const did of ['did:plc:aaaaaaaaaaaaaaaaaaaaaaaa', 'did:web:photos.example%3A8443:alice']) {
+      const path = photoPath(did, {
+        galleryId: `at://${did}/social.grain.gallery/pre:fix`,
+        id: `at://${did}/social.grain.photo/~1.2-3_`,
+      });
+      const url = new URL(path, 'https://photos.example');
+      assert.equal(actorFromPath(url.pathname), did);
+      assert.deepEqual(photoFromHash(url.hash), { gallery: 'pre:fix', photo: '~1.2-3_' });
+    }
+    assert.equal(photoFromHash(''), undefined);
+    assert.equal(photoFromHash('#ordinary-anchor'), undefined);
+  });
+  it('rejects incomplete, ambiguous, and invalid photo selections', () => {
+    for (const hash of [
+      '#gallery=one',
+      '#photo=two',
+      '#gallery=&photo=two',
+      '#gallery=one&photo=two&photo=three',
+      '#gallery=one&gallery=two&photo=three',
+    ])
+      assert.throws(() => photoFromHash(hash), /incomplete or invalid/);
+    for (const key of [
+      '.',
+      '..',
+      'a/b',
+      'at://someone/photo',
+      'any space',
+      'é',
+      'x'.repeat(513),
+      '%ZZ',
+    ])
+      assert.throws(
+        () => photoFromHash(`#${new URLSearchParams({ gallery: key, photo: 'valid' })}`),
+        /incomplete or invalid/,
+      );
+    assert.deepEqual(photoFromHash(`#gallery=${'a'.repeat(512)}&photo=Valid-KEY`), {
+      gallery: 'a'.repeat(512),
+      photo: 'Valid-KEY',
+    });
   });
 });

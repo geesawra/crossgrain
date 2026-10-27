@@ -2,49 +2,49 @@ import type { Photo } from '../lib/grain.ts';
 import { node } from '../ui/dom.ts';
 
 export class PhotoImage extends HTMLElement {
-  private photo?: Photo;
-  private fullSize = false;
-  private eager = false;
-  private image?: HTMLImageElement;
-  private version = 0;
+  #photo?: Photo;
+  #fullSize = false;
+  #eager = false;
+  #image?: HTMLImageElement;
+  #version = 0;
 
   configure(photo: Photo, fullSize = false, eager = false) {
-    if (this.photo === photo && this.fullSize === fullSize && this.eager === eager) return;
-    this.photo = photo;
-    this.fullSize = fullSize;
-    this.eager = eager;
-    if (this.isConnected) this.render();
+    if (this.#photo === photo && this.#fullSize === fullSize && this.#eager === eager) return;
+    this.#photo = photo;
+    this.#fullSize = fullSize;
+    this.#eager = eager;
+    if (this.isConnected) this.#render();
   }
 
   connectedCallback() {
-    this.render();
+    this.#render();
   }
   disconnectedCallback() {
-    this.cancel();
+    this.#cancel();
   }
 
-  private cancel() {
-    this.version++;
-    if (!this.image) return;
-    this.image.onload = this.image.onerror = null;
-    this.image.removeAttribute('srcset');
-    this.image.removeAttribute('src');
+  #cancel() {
+    this.#version++;
+    if (!this.#image) return;
+    this.#image.onload = this.#image.onerror = null;
+    this.#image.removeAttribute('srcset');
+    this.#image.removeAttribute('src');
   }
 
-  private render() {
-    if (!this.photo) return;
-    this.cancel();
-    const version = this.version;
-    const photo = this.photo;
-    const fullSize = this.fullSize;
+  #render() {
+    if (!this.#photo) return;
+    this.#cancel();
+    const version = this.#version;
+    const photo = this.#photo;
+    const fullSize = this.#fullSize;
     const frame = node('div', 'photo-image-frame');
     frame.setAttribute('aria-busy', 'true');
     const image = node('img', 'photo-image');
-    this.image = image;
+    this.#image = image;
     image.alt = photo.alt;
     image.width = photo.width;
     image.height = photo.height;
-    image.loading = this.eager ? 'eager' : 'lazy';
+    image.loading = this.#eager ? 'eager' : 'lazy';
     image.decoding = 'async';
     let stage = 0;
     let indicator: HTMLElement | undefined;
@@ -56,7 +56,7 @@ export class PhotoImage extends HTMLElement {
       indicator.append(spinner, node('span', '', 'Loading full-resolution image…'));
       frame.append(indicator);
     }
-    const current = () => this.isConnected && this.version === version;
+    const current = () => this.isConnected && this.#version === version;
     const setSource = () => {
       const original = fullSize ? stage === 0 : stage === 1;
       if (!original && !fullSize) image.srcset = `${photo.src} 1x, ${photo.fullSrc} 2x`;

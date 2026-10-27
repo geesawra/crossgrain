@@ -16,9 +16,9 @@ export class PhotoshowApp extends PhotoElement {
   declare private ready: boolean;
   declare private routeError: boolean;
   declare private formError: string;
-  private version = 0;
-  private pop = () => {
-    void this.readRoute();
+  #version = 0;
+  #pop = () => {
+    void this.#readRoute();
   };
 
   constructor() {
@@ -30,37 +30,39 @@ export class PhotoshowApp extends PhotoElement {
   }
   connectedCallback() {
     super.connectedCallback();
-    window.addEventListener('popstate', this.pop);
-    void this.readRoute();
+    window.addEventListener('popstate', this.#pop);
+    void this.#readRoute();
   }
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.version++;
-    window.removeEventListener('popstate', this.pop);
+    this.#version++;
+    window.removeEventListener('popstate', this.#pop);
   }
 
   navigate(actor: string) {
     window.history.pushState({}, '', galleryPath(actor));
     window.scrollTo({ top: 0, behavior: 'instant' });
-    void this.readRoute();
+    void this.#readRoute();
   }
 
-  private async readRoute() {
-    const version = ++this.version;
-    this.actor = actorFromPath(window.location.pathname);
+  async #readRoute() {
+    const actor = actorFromPath(window.location.pathname);
+    if (this.ready && this.querySelector('photo-gallery')?.matchesActor(actor)) return;
+    const version = ++this.#version;
+    this.actor = actor;
     this.ready = this.routeError = false;
     this.formError = '';
     document.title = 'Photoshow';
     if (!this.actor) return;
     try {
       await import('./gallery.ts');
-      if (this.isConnected && version === this.version) this.ready = true;
+      if (this.isConnected && version === this.#version) this.ready = true;
     } catch {
-      if (this.isConnected && version === this.version) this.routeError = true;
+      if (this.isConnected && version === this.#version) this.routeError = true;
     }
   }
 
-  private submit(event: SubmitEvent) {
+  #submit(event: SubmitEvent) {
     event.preventDefault();
     const input = (event.currentTarget as HTMLFormElement).querySelector('input')!;
     try {
@@ -82,11 +84,11 @@ export class PhotoshowApp extends PhotoElement {
           )
         : html`<main class="gallery">
             <p class="gallery-state" role=${this.routeError ? 'alert' : 'status'}>
-              ${this.routeError ? html`Couldn’t load the gallery. Please try again.<button @click=${this.pop}>Retry</button>` : 'Loading photos…'}
+              ${this.routeError ? html`Couldn’t load the gallery. Please try again.<button @click=${this.#pop}>Retry</button>` : 'Loading photos…'}
             </p>
           </main>`;
     return html`<main class="home">
-      <form class="handle-form" novalidate @submit=${this.submit}>
+      <form class="handle-form" novalidate @submit=${this.#submit}>
         <label for="handle" class="sr-only">Your Grain handle or DID</label>
         <div class="handle-input">
           <input

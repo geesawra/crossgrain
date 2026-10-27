@@ -9,7 +9,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --experimental-strip-types --test src/lib/*.test.ts src/elements/*.test.ts src/ui/*.test.ts",
     "size": "node scripts/bundle-size.mjs",
-    "test:build": "node scripts/smoke-build.mjs && node scripts/smoke-build.mjs --direct",
+    "test:build": "node scripts/smoke-build.mjs && node scripts/smoke-build.mjs --direct && node scripts/smoke-build.mjs --photo",
     "lint:js": "eslint . --max-warnings 0",
     "lint:css": "stylelint src/**/*.css",
     "format": "prettier --write .",

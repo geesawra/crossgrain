@@ -14,7 +14,7 @@ export class PhotoCard extends PhotoElement {
   declare photo?: Photo;
   declare eager: boolean;
   declare private revealed: boolean;
-  private image = createRef<PhotoImage>();
+  #image = createRef<PhotoImage>();
   constructor() {
     super();
     this.eager = this.revealed = false;
@@ -24,9 +24,9 @@ export class PhotoCard extends PhotoElement {
       this.revealed = false;
   }
   protected updated() {
-    if (this.photo) this.image.value?.configure(this.photo, false, this.eager);
+    if (this.photo) this.#image.value?.configure(this.photo, false, this.eager);
   }
-  private open() {
+  #open() {
     this.dispatchEvent(
       new CustomEvent<Photo>('photo-open', { bubbles: true, detail: this.photo! }),
     );
@@ -53,16 +53,16 @@ export class PhotoCard extends PhotoElement {
                 class="photo-open"
                 aria-haspopup="dialog"
                 aria-label=${`Open ${photo.title || 'photo'}`}
-                @click=${this.open}
+                @click=${this.#open}
               >
-                <photo-image ${ref(this.image)}></photo-image>
+                <photo-image ${ref(this.#image)}></photo-image>
               </button>`
         }
       </div>
       ${
         photo.caption || metadata
           ? html`<figcaption>
-              ${photo.caption ? html`<button class="caption" @click=${this.open}>${photo.caption}</button>` : nothing}
+              ${photo.caption ? html`<button class="caption" @click=${this.#open}>${photo.caption}</button>` : nothing}
               ${metadata ? html`<p class="photo-metadata">${metadata}</p>` : nothing}
             </figcaption>`
           : nothing

@@ -6,11 +6,13 @@ import { runInNewContext } from 'node:vm';
 import { Window } from 'happy-dom';
 
 const base = (process.env.PAGES_BASE_PATH || '/').replace(/\/?$/, '/');
-const direct = process.argv.includes('--direct');
+const sharedPhoto = process.argv.includes('--photo');
+const direct = process.argv.includes('--direct') || sharedPhoto;
 const did = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
 const gallery = `at://${did}/social.grain.gallery/gallery1`;
 const photo = `at://${did}/social.grain.photo/photo1`;
-const directPath = `${base}${did}?view=all#photo`;
+const fragment = sharedPhoto ? '#gallery=gallery1&photo=photo1' : '#portfolio';
+const directPath = `${base}${did}?view=all${fragment}`;
 const window = new Window({
   url: `http://localhost:4173${base}${direct ? `?__photoshow_route=${encodeURIComponent(directPath)}` : ''}`,
   settings: {
@@ -81,18 +83,19 @@ globalThis.fetch = async (input) => {
         },
       ],
     });
+  const record = {
+    uri: gallery,
+    value: {
+      title: 'A collection',
+      description: 'A gallery caption',
+      createdAt: '2026-10-01T00:00:00Z',
+    },
+  };
+  if (url.hostname === 'photos.example' && url.pathname.endsWith('/com.atproto.repo.getRecord'))
+    return Response.json(record);
   if (url.hostname === 'photos.example')
     return Response.json({
-      records: [
-        {
-          uri: gallery,
-          value: {
-            title: 'A collection',
-            description: 'A gallery caption',
-            createdAt: '2026-10-01T00:00:00Z',
-          },
-        },
-      ],
+      records: [record],
     });
   assert.equal(url.hostname, 'grain.social');
   return Response.json({
@@ -163,7 +166,7 @@ try {
     location: {
       pathname: `${base}${did}`,
       search: '?view=all',
-      hash: '#photo',
+      hash: fragment,
       replace: (target) => {
         redirected = target;
       },
@@ -203,9 +206,17 @@ try {
     '2026-09-30T18:15:00Z',
   );
   assert.equal(window.document.querySelectorAll('photo-card time').length, 0);
-  window.document.querySelector('.photo-open').click();
+  if (!sharedPhoto) window.document.querySelector('.photo-open').click();
   await until(() => window.document.querySelector('dialog')?.open);
   const dialog = window.document.querySelector('dialog');
+  assert.equal(window.location.hash, '#gallery=gallery1&photo=photo1');
+  if (sharedPhoto) {
+    assert(!requests.some((url) => url.pathname.endsWith('/com.atproto.repo.listRecords')));
+    assert.equal(
+      requests.filter((url) => url.pathname.endsWith('/com.atproto.repo.getRecord')).length,
+      1,
+    );
+  }
   assert(
     dialog
       .querySelector('img')
@@ -221,6 +232,7 @@ try {
   assert.equal(window.localStorage.getItem('photoshow.lightbox.background'), 'white');
   assert.equal(dialog.querySelector('img'), image);
   const viewer = window.document.querySelector('photo-lightbox');
+  const firstGroup = window.document.querySelector('photo-group');
   const details = dialog.querySelector('.lightbox-details');
   dialog.querySelector('.lightbox-image').click();
   await viewer.updateComplete;
@@ -237,13 +249,26 @@ try {
   assert.equal(dialog.querySelector('.grain-link').hostname, 'grain.social');
   dialog.querySelector('.lightbox-close').click();
   assert.equal(window.document.body.style.overflow, '');
+  await until(
+    () =>
+      !window.location.hash &&
+      window.document.querySelector('photo-card') &&
+      (!sharedPhoto || window.document.querySelector('photo-group') !== firstGroup),
+  );
+  assert.equal(window.document.querySelector('dialog'), dialog);
+  window.history.forward();
+  await until(() => dialog.open);
+  assert.equal(window.location.hash, '#gallery=gallery1&photo=photo1');
+  window.history.back();
+  await until(() => !dialog.open);
   window.document.querySelector('.photo-open').click();
   await until(() => dialog.open);
   assert.equal(dialog.querySelector('input[value="white"]').checked, true);
   dialog.querySelector('.lightbox-close').click();
-  assert.equal(requests.length, 3);
+  await until(() => !window.location.hash);
+  assert.equal(requests.length, sharedPhoto ? 6 : 3);
   console.log(
-    `Production ${direct ? 'direct link' : 'home'} verified at ${base}: font readiness, deferred Mono, licenses, Pages redirect, DID loading, photography title, grouped photos, lazy lightbox, original image, loading indicator, saved background, details toggle, and close. No browser launched.`,
+    `Production ${sharedPhoto ? 'photo link' : direct ? 'direct link' : 'home'} verified at ${base}: font readiness, deferred Mono, licenses, Pages redirect, DID loading, photography title, grouped photos, lazy lightbox, original image, saved background, details, shared URLs, and Back/Forward. No browser launched.`,
   );
 } finally {
   window.document.body.replaceChildren();

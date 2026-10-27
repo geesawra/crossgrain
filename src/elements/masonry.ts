@@ -1,44 +1,44 @@
 export class PhotoMasonry extends HTMLElement {
-  private observer?: ResizeObserver;
-  private childrenObserver?: MutationObserver;
-  private items = new Set<Element>();
-  private frame = 0;
+  #observer?: ResizeObserver;
+  #childrenObserver?: MutationObserver;
+  #items = new Set<Element>();
+  #frame = 0;
 
   connectedCallback() {
     this.classList.add('masonry');
-    this.observer = new ResizeObserver(() => this.schedule());
-    this.observer.observe(this);
-    this.childrenObserver = new MutationObserver(() => this.syncChildren());
-    this.childrenObserver.observe(this, { childList: true });
-    this.syncChildren();
+    this.#observer = new ResizeObserver(() => this.#schedule());
+    this.#observer.observe(this);
+    this.#childrenObserver = new MutationObserver(() => this.#syncChildren());
+    this.#childrenObserver.observe(this, { childList: true });
+    this.#syncChildren();
     this.layout();
   }
 
   disconnectedCallback() {
-    this.observer?.disconnect();
-    this.childrenObserver?.disconnect();
-    this.items.clear();
-    cancelAnimationFrame(this.frame);
+    this.#observer?.disconnect();
+    this.#childrenObserver?.disconnect();
+    this.#items.clear();
+    cancelAnimationFrame(this.#frame);
   }
 
-  private syncChildren() {
-    for (const item of this.items)
+  #syncChildren() {
+    for (const item of this.#items)
       if (item.parentElement !== this) {
-        this.observer?.unobserve(item);
-        this.items.delete(item);
+        this.#observer?.unobserve(item);
+        this.#items.delete(item);
       }
     for (const item of this.children)
-      if (!this.items.has(item)) {
+      if (!this.#items.has(item)) {
         item.classList.add('masonry-item');
-        this.observer?.observe(item);
-        this.items.add(item);
+        this.#observer?.observe(item);
+        this.#items.add(item);
       }
-    this.schedule();
+    this.#schedule();
   }
 
-  private schedule() {
-    cancelAnimationFrame(this.frame);
-    this.frame = requestAnimationFrame(() => this.layout());
+  #schedule() {
+    cancelAnimationFrame(this.#frame);
+    this.#frame = requestAnimationFrame(() => this.layout());
   }
 
   layout() {
