@@ -1,4 +1,4 @@
-const fallback = `${import.meta.env?.BASE_URL || '/'}favicon.png`;
+const fallback = `${import.meta.env?.BASE_URL || '/'}favicon.png?v=2`;
 let pending: HTMLImageElement | undefined;
 let current: HTMLLinkElement | null;
 let source: string | undefined;
