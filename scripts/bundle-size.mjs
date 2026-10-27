@@ -29,6 +29,7 @@ function measure(files) {
 }
 
 const home = measure(dependencies('index.html'));
+const lookup = measure(dependencies('src/elements/actor-search.ts', dependencies('index.html')));
 const gallery = measure(dependencies('src/elements/gallery.ts', dependencies('index.html')));
 const complete = measure(
   new Set(
@@ -42,8 +43,13 @@ const row = (value) => ({
   'gzip (KB)': (value.gzip / 1000).toFixed(2),
   'Brotli (KB)': (value.brotli / 1000).toFixed(2),
 });
-console.table({ Home: row(home), Gallery: row(gallery), 'Including lightbox': row(complete) });
+console.table({
+  Home: row(home),
+  'Home with account lookup': row(lookup),
+  Gallery: row(gallery),
+  'All features': row(complete),
+});
 
-// Keep room for the optional profile and progressive loading without unbounded growth.
-if (gallery.gzip > 18_500 || complete.gzip > 21_000)
+// Bound each route's cost, including the optional lookup and lightbox chunks.
+if (home.gzip > 10_000 || lookup.gzip > 12_000 || gallery.gzip > 19_250 || complete.gzip > 24_000)
   throw new Error('The client JavaScript exceeded its size budget.');

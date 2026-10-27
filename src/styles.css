@@ -125,6 +125,33 @@ button {
   width: min(100%, 400px);
 }
 
+.home-name,
+.gallery-title,
+.gallery-group-title {
+  font-family: 'Atkinson Hyperlegible Next', sans-serif;
+  font-weight: 700;
+  font-style: italic;
+  font-synthesis: weight style;
+  letter-spacing: -0.06em;
+  line-height: 1.4;
+}
+
+.home-name,
+.gallery-title {
+  font-size: 32px;
+}
+
+.home-name {
+  margin: 0 0 28px;
+}
+
+.form-hint {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .handle-input {
   display: flex;
   gap: 16px;
@@ -162,6 +189,88 @@ button {
   font-size: 14px;
 }
 
+actor-search {
+  position: relative;
+  display: block;
+}
+
+.actor-popup {
+  position: absolute;
+  inset: calc(100% + 8px) 0 auto;
+  z-index: 1;
+  max-height: min(320px, 40svh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--background);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+}
+
+.actor-popup ul {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+}
+
+.actor-popup [role='option'] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.actor-popup [aria-selected='true'] {
+  background: var(--placeholder);
+}
+
+.actor-avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--placeholder);
+}
+
+.actor-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.actor-identity {
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.actor-name,
+.actor-handle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actor-name {
+  font-size: 14px;
+}
+
+.actor-handle,
+.actor-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.actor-status {
+  margin: 0;
+  padding: 14px;
+  line-height: 1.6;
+}
+
 .form-error {
   color: var(--error);
   font-size: 12px;
@@ -170,10 +279,10 @@ button {
 }
 
 .gallery {
-  --gallery-padding: clamp(24px, 5vw, 80px);
+  --gallery-padding: clamp(1.5rem, 5vw, 5rem);
 
   width: 100%;
-  max-width: 1440px;
+  max-width: 153.125rem;
   margin-inline: auto;
   padding: var(--gallery-padding);
 }
@@ -191,9 +300,6 @@ button {
   flex: 0 1 auto;
   min-width: 0;
   margin: 0;
-  font-size: clamp(28px, 3.2vw, 40px);
-  font-weight: 400;
-  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
@@ -203,6 +309,8 @@ button {
 }
 
 .gallery-credit {
+  /* Match the italic title’s visible left edge. */
+  padding-inline-start: 2px;
   margin-bottom: 40px;
   animation: gallery-in 450ms ease both;
 }
@@ -264,9 +372,7 @@ button {
 
 .gallery-group-title {
   margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.6;
+  font-size: 20px;
   overflow-wrap: anywhere;
 }
 
@@ -342,6 +448,29 @@ button {
   border-top-color: var(--foreground);
   border-radius: 50%;
   animation: image-spin 900ms linear infinite;
+}
+
+.gallery-loading {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 180ms ease,
+    visibility 0s;
+}
+
+.gallery-loading[aria-hidden='true'] {
+  opacity: 0;
+  visibility: hidden;
+  transition-delay: 0s, 180ms;
+}
+
+.gallery-loading[aria-hidden='true'] .image-spinner {
+  animation-play-state: paused;
 }
 
 @keyframes image-spin {
@@ -722,6 +851,12 @@ figcaption {
   background: #fff;
 }
 
+@media (width >= 1000px) {
+  .gallery {
+    padding-inline: clamp(1rem, 2vw, 2rem);
+  }
+}
+
 @media (width <= 800px) {
   .lightbox {
     --lightbox-inset: 8px;
@@ -785,6 +920,7 @@ figcaption {
 
 @media (prefers-reduced-motion: reduce) {
   crossgrain-app,
+  .gallery-loading,
   .photo-image,
   .lightbox-image,
   .lightbox-layout,

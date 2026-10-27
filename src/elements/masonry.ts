@@ -56,9 +56,7 @@ export class PhotoMasonry extends HTMLElement {
         : 2
       : width < 440
         ? 1
-        : width < 900
-          ? 2
-          : 3;
+        : 2;
     const gap = galleries ? 40 : width < 580 ? 12 : 20;
     const bottomGap = galleries ? 56 : gap + 8;
     const cardWidth = (width - (columns - 1) * gap) / columns;

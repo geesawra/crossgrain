@@ -96,6 +96,7 @@ Object.defineProperty(globalThis, 'IntersectionObserver', {
 await import('./app.ts');
 await import('./gallery.ts');
 await import('./lightbox.ts');
+await import('./actor-search.ts');
 
 const originalFetch = globalThis.fetch;
 const imageDecode = dom.HTMLImageElement.prototype.decode;
@@ -319,6 +320,231 @@ after(async () => {
   await dom.happyDOM.close();
 });
 
+describe('live account suggestions', () => {
+  const first = {
+    did: 'did:web:first.example',
+    handle: 'first.example',
+    displayName: '<b>First</b>',
+  };
+  const second = { did: 'did:web:second.example', handle: 'second.example', displayName: 'Second' };
+  function field() {
+    const element = dom.document.createElement('actor-search');
+    element.innerHTML = '<input role="combobox" aria-autocomplete="list" aria-expanded="false">';
+    dom.document.body.append(element);
+    const input = element.querySelector('input')!;
+    input.focus();
+    return { element, input };
+  }
+  function type(input: HTMLInputElement, value: string, isComposing = false) {
+    input.value = value;
+    input.dispatchEvent(new dom.InputEvent('input', { bubbles: true, isComposing }));
+  }
+  function key(input: HTMLInputElement, value: string, isComposing = false) {
+    const event = new KeyboardEvent('keydown', { key: value, cancelable: true, isComposing });
+    input.dispatchEvent(event);
+    return event;
+  }
+  it('waits for two characters and a typing pause, with no photo or default-account requests', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const calls: URL[] = [];
+    globalThis.fetch = async (input) => {
+      calls.push(new URL(String(input)));
+      return json({ actors: [first, second] });
+    };
+    const { element, input } = field();
+    await tick();
+    t.mock.timers.tick(250);
+    assert.equal(calls.length, 0);
+    type(input, 'x');
+    t.mock.timers.tick(250);
+    assert.equal(calls.length, 0);
+    type(input, 'debounce');
+    t.mock.timers.tick(249);
+    type(input, 'debounce-final');
+    t.mock.timers.tick(249);
+    assert.equal(calls.length, 0);
+    t.mock.timers.tick(1);
+    await until(() => element.querySelectorAll('[role="option"]').length === 2);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].hostname, 'public.api.bsky.app');
+    assert.equal(calls[0].searchParams.get('q'), 'debounce-final');
+    assert.equal(input.getAttribute('aria-expanded'), 'true');
+    assert.equal(element.querySelector('ul')?.id, input.getAttribute('aria-controls'));
+    assert.equal(element.querySelector('b'), null);
+    assert(element.textContent?.includes('<b>First</b>'));
+    assert.equal(input.getAttribute('aria-activedescendant'), null);
+  });
+  it('keeps focus in the input, wraps arrow selection, and chooses the stable DID with Enter', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    globalThis.fetch = async () => json({ actors: [first, second] });
+    const { element, input } = field();
+    let chosen = '';
+    element.addEventListener('actor-select', (event) => {
+      chosen = (event as CustomEvent<string>).detail;
+    });
+    type(input, 'keyboard-query');
+    t.mock.timers.tick(250);
+    await until(() => element.querySelector('[role="option"]'));
+    assert.equal(key(input, 'ArrowUp').defaultPrevented, true);
+    await element.updateComplete;
+    const options = element.querySelectorAll('[role="option"]');
+    assert.equal(input.getAttribute('aria-activedescendant'), options[1].id);
+    key(input, 'ArrowDown');
+    await element.updateComplete;
+    assert.equal(options[0].getAttribute('aria-selected'), 'true');
+    assert.equal(dom.document.activeElement, input);
+    assert.equal(key(input, 'Enter').defaultPrevented, true);
+    await element.updateComplete;
+    assert.equal(chosen, first.did);
+    assert.equal(input.value, first.handle);
+    assert.equal(input.getAttribute('aria-expanded'), 'false');
+    assert.equal(input.getAttribute('aria-activedescendant'), null);
+  });
+  it('cancels stale requests on new input and on blur, and ignores late responses', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const pending: { signal: AbortSignal; resolve: (response: Response) => void }[] = [];
+    globalThis.fetch = async (_input, init) =>
+      new Promise<Response>((resolve) => {
+        pending.push({ signal: init!.signal!, resolve });
+      });
+    const { element, input } = field();
+    type(input, 'stale-first');
+    t.mock.timers.tick(250);
+    type(input, 'stale-second');
+    assert.equal(pending[0].signal.aborted, true);
+    t.mock.timers.tick(250);
+    pending[1].resolve(json({ actors: [second] }));
+    await until(() => element.querySelector('[role="option"]'));
+    pending[0].resolve(json({ actors: [first] }));
+    await tick();
+    assert(element.textContent?.includes(second.handle));
+    assert(!element.textContent?.includes(first.handle));
+    type(input, 'stale-blur');
+    t.mock.timers.tick(250);
+    input.blur();
+    assert.equal(pending[2].signal.aborted, true);
+    pending[2].resolve(json({ actors: [first] }));
+    await tick();
+    assert.equal(element.querySelectorAll('[role="option"]').length, 0);
+    assert.equal(input.getAttribute('aria-expanded'), 'false');
+  });
+  it('lets Escape, Tab, and manual Enter close suggestions while leaving direct entry usable', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    globalThis.fetch = async () => json({ actors: [first] });
+    const { element, input } = field();
+    type(input, 'escape-pending');
+    assert.equal(key(input, 'Escape').defaultPrevented, true);
+    t.mock.timers.tick(250);
+    await tick();
+    assert.equal(input.getAttribute('aria-expanded'), 'false');
+    type(input, 'manual-query');
+    t.mock.timers.tick(250);
+    await until(() => element.querySelector('[role="option"]'));
+    assert.equal(key(input, 'Enter').defaultPrevented, false);
+    assert.equal(input.value, 'manual-query');
+    await element.updateComplete;
+    assert.equal(input.getAttribute('aria-expanded'), 'false');
+    type(input, 'tab-query');
+    t.mock.timers.tick(250);
+    await until(() => element.querySelector('[role="option"]'));
+    assert.equal(key(input, 'Tab').defaultPrevented, false);
+    await element.updateComplete;
+    assert.equal(input.getAttribute('aria-expanded'), 'false');
+    globalThis.fetch = async () => {
+      throw new Error('DIDs must not trigger search');
+    };
+    type(input, 'did:web:manual.example');
+    t.mock.timers.tick(250);
+    await element.updateComplete;
+    assert.equal(input.getAttribute('aria-expanded'), 'false');
+  });
+  it('waits for text composition to finish and preserves normal input after lookup errors', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return json({ actors: [] });
+    };
+    const { element, input } = field();
+    type(input, 'composition-query', true);
+    t.mock.timers.tick(250);
+    assert.equal(calls, 0);
+    input.dispatchEvent(new Event('compositionend'));
+    t.mock.timers.tick(250);
+    await until(() => element.textContent?.includes('No matching accounts'));
+    assert.equal(key(input, 'Enter', true).defaultPrevented, false);
+    globalThis.fetch = async () => {
+      throw new Error('Offline');
+    };
+    type(input, 'error-query');
+    t.mock.timers.tick(250);
+    await until(() => element.textContent?.includes('Search unavailable'));
+    assert.equal(input.getAttribute('aria-busy'), 'false');
+    assert.equal(input.getAttribute('aria-invalid'), null);
+    assert.equal(key(input, 'Enter').defaultPrevented, false);
+  });
+  it('cancels pending work when removed and reconnects without duplicate listeners', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return json({ actors: [first] });
+    };
+    const { element, input } = field();
+    type(input, 'removed-query');
+    element.remove();
+    t.mock.timers.tick(250);
+    assert.equal(calls, 0);
+    dom.document.body.append(element);
+    input.focus();
+    type(input, 'reconnected-query');
+    t.mock.timers.tick(250);
+    await until(() => element.querySelector('[role="option"]'));
+    assert.equal(calls, 1);
+    const option = element.querySelector<HTMLElement>('[role="option"]')!;
+    const down = new MouseEvent('mousedown', { cancelable: true });
+    option.dispatchEvent(down);
+    assert.equal(down.defaultPrevented, true);
+    let chosen = '';
+    element.addEventListener('actor-select', (event) => {
+      chosen = (event as CustomEvent<string>).detail;
+    });
+    option.click();
+    assert.equal(chosen, first.did);
+  });
+  it('opens the selected account from the home form without fetching photos before selection', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const api = repository();
+    const repoFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) =>
+      String(input).includes('searchActorsTypeahead')
+        ? json({ actors: [{ did: api.did, handle: api.handle }] })
+        : repoFetch(input, init);
+    const app = dom.document.createElement('crossgrain-app');
+    dom.document.body.append(app);
+    await until(() => app.querySelector('input'));
+    const input = app.querySelector('input')!;
+    app.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+    await app.updateComplete;
+    assert.equal(input.getAttribute('aria-invalid'), 'true');
+    input.focus();
+    type(input, api.handle);
+    t.mock.timers.tick(250);
+    await until(() => app.querySelector('[role="option"]'));
+    assert.equal(app.querySelector('input'), input);
+    assert.equal(input.getAttribute('aria-invalid'), 'false');
+    assert.equal(input.getAttribute('aria-expanded'), 'true');
+    assert.equal(api.requests.length, 0);
+    key(input, 'ArrowDown');
+    await tick();
+    assert.equal(dom.location.pathname, '/');
+    key(input, 'Enter');
+    await until(() => app.querySelector('photo-card'));
+    assert.equal(dom.location.pathname, `/${api.did}`);
+    assert(api.requests.every(({ url }) => !url.pathname.includes('searchActorsTypeahead')));
+  });
+});
+
 describe('Lit app and paged galleries', () => {
   it('does not wait for a Bluesky profile before displaying photos, then links only the handle', async () => {
     const api = repository();
@@ -359,7 +585,10 @@ describe('Lit app and paged galleries', () => {
     const gallery = dom.document.createElement('photo-gallery');
     gallery.actor = api.did;
     dom.document.body.append(gallery);
+    await gallery.updateComplete;
+    assert(gallery.querySelector('.gallery-loading[aria-hidden="false"]'));
     await until(() => gallery.querySelectorAll('photo-card').length === 2);
+    assert.equal(gallery.querySelector('.gallery-loading')?.getAttribute('aria-hidden'), 'true');
     const image = gallery.querySelector('img');
     assert.equal(gallery.querySelector('main')?.getAttribute('aria-busy'), 'true');
     assert(!gallery.textContent?.includes('Loading'));
@@ -420,8 +649,8 @@ describe('Lit app and paged galleries', () => {
     dom.document.body.append(app);
     await tick();
     assert.equal(app.querySelectorAll('input').length, 1);
-    assert.equal(app.querySelector('input')?.placeholder, 'your handle here');
-    assert.equal(app.querySelectorAll('img, h1, nav, header').length, 0);
+    assert.equal(app.querySelector('input')?.placeholder, 'jcsalterego.bsky.social');
+    assert.equal(app.querySelectorAll('img, nav, header').length, 0);
     assert.equal(calls, 0);
     app.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
     await tick();
@@ -1286,6 +1515,40 @@ describe('lightbox touch gestures', () => {
 });
 
 describe('masonry positioning', () => {
+  it('keeps two photo columns inside each staggered gallery, including a lone wide gallery', () => {
+    const galleries = dom.document.createElement('photo-masonry');
+    galleries.setAttribute('variant', 'galleries');
+    Object.defineProperty(galleries, 'clientWidth', { value: 1736 });
+    for (let n = 0; n < 2; n++) {
+      const group = dom.document.createElement('div');
+      const photos = dom.document.createElement('photo-masonry');
+      Object.defineProperty(photos, 'clientWidth', {
+        get: () => Number.parseFloat(group.style.width) || 0,
+      });
+      group.getBoundingClientRect = () =>
+        ({ height: Number.parseFloat(photos.style.height) || 0 }) as DOMRect;
+      for (const height of [100, 150, 80]) {
+        const photo = dom.document.createElement('div');
+        photo.getBoundingClientRect = () => ({ height }) as DOMRect;
+        photos.append(photo);
+      }
+      group.append(photos);
+      galleries.append(group);
+    }
+    dom.document.body.append(galleries);
+    assert.equal((galleries.children[1] as HTMLElement).style.transform, 'translate(888px, 0px)');
+    for (const photos of galleries.querySelectorAll('photo-masonry')) {
+      assert.equal((photos.children[0] as HTMLElement).style.width, '414px');
+      assert.equal((photos.children[1] as HTMLElement).style.transform, 'translate(434px, 0px)');
+      assert.equal((photos.children[2] as HTMLElement).style.transform, 'translate(0px, 128px)');
+    }
+    galleries.children[1].remove();
+    galleries.layout();
+    const photos = galleries.querySelector('photo-masonry')!;
+    assert.equal((photos.children[0] as HTMLElement).style.width, '858px');
+    assert.equal((photos.children[1] as HTMLElement).style.transform, 'translate(878px, 0px)');
+    assert.equal((photos.children[2] as HTMLElement).style.transform, 'translate(0px, 128px)');
+  });
   it('places each photo in the shortest column and recalculates on resize', () => {
     const masonry = dom.document.createElement('photo-masonry');
     let width = 600;

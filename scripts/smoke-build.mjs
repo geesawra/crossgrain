@@ -85,6 +85,14 @@ window.Image = class {
 globalThis.fetch = async (input) => {
   const url = new URL(String(input));
   requests.push(url);
+  if (url.pathname.endsWith('/app.bsky.actor.searchActorsTypeahead')) {
+    assert.equal(url.origin, 'https://public.api.bsky.app');
+    assert.equal(url.searchParams.get('q'), 'photographer');
+    assert.equal(url.searchParams.get('limit'), '5');
+    return Response.json({
+      actors: [{ did, handle: 'photographer.example', displayName: 'Photographer' }],
+    });
+  }
   if (url.hostname === 'plc.directory')
     return Response.json({
       id: did,
@@ -162,6 +170,7 @@ try {
   }
   const app = window.document.querySelector('crossgrain-app');
   await until(() => app.querySelector('main'));
+  assert.equal(window.customElements.get('actor-search'), undefined);
   assert.equal(app.hasAttribute('fonts-ready'), false);
   assert.equal(app.inert, true);
   assert.equal(addedFonts.length, 0);
@@ -212,12 +221,25 @@ try {
     await until(() => window.document.querySelector('form'));
     assert.equal(fontFaces.length, 1);
     assert.equal(requests.length, 0);
-    window.document.querySelector('input').value = did;
-    window.document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    const input = window.document.querySelector('input');
+    input.focus();
+    await until(() => input.hasAttribute('aria-controls'));
+    input.value = 'photographer';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await until(() => app.querySelector('[role="option"]'));
+    assert.equal(requests.length, 1);
+    assert.equal(fontFaces.length, 1);
+    assert.equal(input.getAttribute('aria-expanded'), 'true');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true }));
+    await until(() => input.hasAttribute('aria-activedescendant'));
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    input.dispatchEvent(enter);
+    assert.equal(enter.defaultPrevented, true);
     assert.equal(window.location.pathname, `${base}${did}`);
   }
-  await until(() => fontFaces.length === 2 && requests.length === 4);
+  await until(() => fontFaces.length === 2 && requests.length === (direct ? 4 : 5));
   assert.equal(window.document.querySelector('photo-card'), null);
+  assert(app.querySelector('.gallery-loading[role="status"][aria-hidden="false"]'));
   const monoFont = fontFaces[1];
   assert.equal(monoFont.family, 'Atkinson Hyperlegible Mono');
   assert.equal(monoFont.descriptors.weight, '400');
@@ -228,6 +250,7 @@ try {
   assert.equal(readFileSync(resolve('dist', monoPath)).subarray(0, 4).toString(), 'wOF2');
   monoFont.release();
   await until(() => window.document.querySelector('photo-card'));
+  assert.equal(app.querySelector('.gallery-loading')?.getAttribute('aria-hidden'), 'true');
   assert.equal(app.querySelector('h1 a'), null, 'A slow optional profile must not delay photos');
   const icon = window.document.querySelector('link[rel="icon"]');
   assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
@@ -316,7 +339,8 @@ try {
   assert.equal(dialog.querySelector('input[value="white"]').checked, true);
   dialog.querySelector('.lightbox-close').click();
   await until(() => !window.location.hash);
-  assert.equal(requests.length, sharedPhoto ? 8 : 4);
+  assert.equal(requests.length, sharedPhoto ? 8 : direct ? 4 : 5);
+  if (direct) assert.equal(window.customElements.get('actor-search'), undefined);
   const credit = app.querySelector('.gallery-credit');
   assert.equal(
     app.querySelector('.gallery-heading .gallery-copyright').textContent.trim(),
@@ -334,7 +358,7 @@ try {
   assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
   assert.equal(icon.type, 'image/svg+xml');
   console.log(
-    `Production ${sharedPhoto ? 'photo link' : direct ? 'direct link' : 'home'} verified at ${base}: concurrent fonts and data, progressive gallery, optional profile link, avatar favicon and fallback, licenses, Pages redirect, lightbox controls, shared URLs, and Back/Forward. No browser launched.`,
+    `Production ${sharedPhoto ? 'photo link' : direct ? 'direct link' : 'home'} verified at ${base}: lazy account lookup, concurrent fonts and data, progressive gallery, optional profile link, avatar favicon and fallback, licenses, Pages redirect, lightbox controls, shared URLs, and Back/Forward. No browser launched.`,
   );
 } finally {
   window.document.body.replaceChildren();

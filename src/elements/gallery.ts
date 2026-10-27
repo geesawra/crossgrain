@@ -15,6 +15,7 @@ import { PhotoElement } from '../ui/element.ts';
 import { loadTechnicalTypography } from '../ui/typography.ts';
 import { loadBlueskyProfile } from '../lib/identity.ts';
 import { setFavicon } from '../ui/favicon.ts';
+import { galleryLoading } from '../ui/loading.ts';
 import './group.ts';
 import type { PhotoLightbox } from './lightbox.ts';
 
@@ -359,6 +360,7 @@ export class PhotoGallery extends PhotoElement {
       @photo-previous=${this.#previousPhoto}
       @photo-close=${this.#closePhoto}
     >
+      ${galleryLoading(this.initialLoading && empty)}
       <header class="gallery-heading" ?hidden=${!this.current}>
         <h1 class="gallery-title"
           >${this.current ? html`${this.profileUrl ? html`<a href=${this.profileUrl} target="_blank" rel="noopener noreferrer">${this.current.identity.handle}</a>` : this.current.identity.handle}’s photography` : nothing}</h1

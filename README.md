@@ -19,7 +19,9 @@ Open the URL printed by Vite. Enter your handle or DID, or open a gallery direct
 http://localhost:5173/did:plc:your-account-did
 ```
 
-The home page has the input and an Open button, with a small copyright notice for geesawra and a [GitHub link](https://github.com/geesawra/crossgrain) at the bottom. It does not load anyone’s photos until you choose an account. Both `did:plc` and `did:web` work. When you enter a handle, the app checks that it belongs to the account and changes the gallery URL to use its DID.
+The home page has the crossgrain name in bold italic Next, the handle input, and an Open button in the center. A short description says what it does: “A gallery viewer for your grain.social photos. Enter your Atmosphere handle or DID to open your gallery.” A small copyright notice for geesawra and a [GitHub link](https://github.com/geesawra/crossgrain) sit at the bottom. It does not load anyone’s photos until you choose an account. Both `did:plc` and `did:web` work. When you enter a handle, the app checks that it belongs to the account and changes the gallery URL to use its DID.
+
+Type at least two characters to see up to five matching Bluesky accounts. Click a suggestion, or use the up and down arrows and Enter to open it. Escape closes the list. You can also enter a full handle or DID and press Open without choosing a suggestion. Accounts without a Bluesky profile still work through direct entry.
 
 ## Build and host
 
@@ -52,9 +54,11 @@ Open `http://localhost:4173/crossgrain/`. Run `npm run build` again to return to
 
 Each portfolio starts with “{handle}’s photography.” If the account has a Bluesky profile, the handle is underlined and links to it. Its Bluesky avatar becomes the tab icon once the image is ready. If there is no avatar, or the image fails to load, the tab keeps the crossgrain icon. Returning home restores that icon too.
 
-The larger portfolio heading has a small “© {year}” beside it, with the year updated automatically. The copyright wraps below the title when space is tight. “Want your own?” sits on a separate line and returns to the home page. The credit appears when the portfolio opens, even as more galleries load below.
+The portfolio heading uses the same 32px bold italic Next style and tight letter spacing as the home page name. A small “© {year}” sits beside it, with the year updated automatically. The copyright wraps below the title when space is tight. “Want your own?” sits on a separate line and returns to the home page. The credit appears when the portfolio opens, even as more galleries load below.
 
-Each Grain gallery has one title and description above its photos. Photos stack into columns within each gallery, and the galleries stack into columns too. The page background and text follow your device’s light or dark setting.
+Each Grain gallery has one title and description above its photos. Gallery titles share the page heading’s bold italic Next styling and tight letter spacing, at a smaller 20px size. Photos stack into columns within each gallery, and the galleries stack into columns too. The page background and text follow your device’s light or dark setting.
+
+Desktop galleries use a wider layout, up to `153.125rem` (2450px at the default 16px root size), with smaller side margins. The width limit and page padding use rem units so they follow your preferred root text size. Galleries stagger beside one another, and each gallery contains two staggered photo columns. A portfolio with just one gallery also keeps two photo columns within it. On narrow screens, photos switch to one column when needed.
 
 The capture date appears beside each gallery name. Galleries with photos from different days show a date range. Missing or invalid capture dates are left out. Photo captions show the photo’s own text and available camera settings (EXIF). Post dates help sort photos but are not shown. Photos marked as sensitive need a tap before they appear.
 
@@ -88,22 +92,24 @@ A shared link loads only its named gallery first, so an older photo can open wit
 
 crossgrain uses two fonts from the [Atkinson Hyperlegible family](https://www.brailleinstitute.org/freefont/). The links below point to the original font projects and the license files included with the site.
 
-| Font                                                                                                                                                      | Used for                                                           | File size | License                                                                      |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------: | ---------------------------------------------------------------------------- |
-| [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next/tree/7925f50f649b3813257faf2f4c0b381011f434f1/fonts/webfonts)      | General text, captions, and labels; upright weights 200–800        |  48.19 KB | [SIL Open Font License 1.1](public/fonts/OFL.txt)                            |
-| [Atkinson Hyperlegible Mono](https://github.com/googlefonts/atkinson-hyperlegible-next-mono/tree/154d50362016cc3e873eb21d242cd0772384c8f9/fonts/webfonts) | Camera settings, dates, and other technical values; regular weight |  22.33 KB | [SIL Open Font License 1.1](public/fonts/atkinson-hyperlegible-mono/OFL.txt) |
+| Font                                                                                                                                                      | Used for                                                        | File size | License                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | --------: | ---------------------------------------------------------------------------- |
+| [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next/tree/7925f50f649b3813257faf2f4c0b381011f434f1/fonts/webfonts)      | General text, captions, and labels; upright weights 200–800     |  48.19 KB | [SIL Open Font License 1.1](public/fonts/OFL.txt)                            |
+| [Atkinson Hyperlegible Mono](https://github.com/googlefonts/atkinson-hyperlegible-next-mono/tree/154d50362016cc3e873eb21d242cd0772384c8f9/fonts/webfonts) | Camera settings, dates, and technical values; regular font file |  22.33 KB | [SIL Open Font License 1.1](public/fonts/atkinson-hyperlegible-mono/OFL.txt) |
 
-In the lightbox, labels such as Camera and Lens use Next. Their values use Mono.
+In the lightbox, labels such as Camera and Lens use Next. Their values use Mono. Both page titles use Next at 32px, with a bold weight, italic styling, and tight letter spacing.
 
-The site hosts both WOFF2 files and makes no requests to a separate font service. Next starts loading with the page. Mono loads only when you open a gallery. Fonts and account data load at the same time. Text waits until its font is ready, so there is no visible font change or layout jump. If a font fails or takes more than three seconds, that text uses a system font for the rest of the visit. It will not switch fonts later.
+The site hosts both WOFF2 files and makes no requests to a separate font service. Next starts loading with the page. Mono loads only when you open a gallery, alongside the account data. Text waits until its font is ready, so there is no visible font change or layout jump. If a font fails or takes more than three seconds, that text uses a system font for the rest of the visit. It will not switch fonts later.
 
 Both font files are unchanged. Each font’s original copyright notice (2020–2024) is included with its license.
 
 ## How data loads
 
+The home page searches Bluesky’s public [`app.bsky.actor.searchActorsTypeahead` API](https://github.com/bluesky-social/atproto/blob/main/packages/bsky/lexicons/app/bsky/actor/searchActorsTypeahead.json) after a 250 ms pause in typing. It sends no credentials. Starting another search, leaving the field, or opening a gallery cancels pending work. Results stay in memory for five minutes, with a limit of 20 searches. An unavailable search leaves direct handle and DID entry working. Suggestions load account names and small avatars, without fetching their photos.
+
 The browser finds the account’s data server from its DID document. It reads `social.grain.gallery` records in pages of three using `com.atproto.repo.listRecords`. Grain’s public `social.grain.unspecced.getGallery` API supplies the photos and camera details for those galleries. The app does not download the account’s entire photo or EXIF history.
 
-The page starts without a loading banner. The heading appears once the account is known, and each gallery fades in as its metadata arrives. One slow gallery does not hold up the others. Reduced-motion settings turn off the fades.
+The page shows a small centered spinner while the gallery code and first photos load. It fades out once the first photo group appears, or when loading ends with no photos or an error. It takes no space in the layout and never blocks clicks. The heading appears once the account is known, and each gallery fades in as its metadata arrives. One slow gallery does not hold up the others. Reduced-motion settings stop the spinner’s rotation and turn off the fades.
 
 A separate request checks the same account’s `app.bsky.actor.profile/self` record on its data server. That one record supplies both the heading link and the avatar, which loads through Bluesky’s CDN. This optional lookup never delays the photos. A missing or unavailable profile leaves the heading plain and the crossgrain icon in place.
 
@@ -117,21 +123,22 @@ Photo data stays in memory for five minutes so return visits are faster. Only th
 
 ## Code and size
 
-The custom elements share CSS and use the normal page DOM. Lit handles templates and reactive updates for the app, gallery, groups, cards, and lightbox. Small native elements handle masonry layout and image loading. `crossgrain-app` handles the form and browser history. `photo-gallery` loads the data. `photo-lightbox` uses the browser’s modal dialog, with keyboard controls and focus restored on close.
+The custom elements share CSS and use the normal page DOM. Lit handles templates and reactive updates for the app, account suggestions, gallery, groups, cards, and lightbox. Small native elements handle masonry layout and image loading. `crossgrain-app` handles the form and browser history. `actor-search` adds the accessible account list while keeping focus in the input. `photo-gallery` loads the data. `photo-lightbox` uses the browser’s modal dialog, with keyboard controls and focus restored on close.
 
 Lit templates run directly in JavaScript and need no template compiler. Vite bundles and minifies the production build; TypeScript checks the source.
 
-The home page loads only the code it needs. Gallery code loads when you open a gallery, and lightbox code loads on the first photo click. New pages add photos without replacing the images already on screen. Leaving a gallery cancels its pending requests. Captions are treated as plain text rather than HTML.
+The home page loads only the code it needs. Account lookup code loads when the input first gets focus; direct gallery links skip it. Gallery code loads when you open a gallery, and lightbox code loads on the first photo click. New pages add photos without replacing the images already on screen. Leaving a gallery cancels its pending requests. Captions and account names are treated as plain text rather than HTML.
 
 Current JavaScript sizes:
 
 | JavaScript                      | Uncompressed |     gzip |   Brotli |
 | ------------------------------- | -----------: | -------: | -------: |
-| Home                            |     23.03 KB |  8.99 KB |  8.05 KB |
-| Gallery, before opening a photo |     49.08 KB | 18.29 KB | 16.34 KB |
-| Including the lightbox          |     55.79 KB | 20.88 KB | 18.56 KB |
+| Home                            |     23.70 KB |  9.68 KB |  8.60 KB |
+| Home with account lookup        |     28.76 KB | 11.82 KB | 10.43 KB |
+| Gallery, before opening a photo |     49.81 KB | 19.01 KB | 16.93 KB |
+| All features                    |     61.60 KB | 23.76 KB | 20.99 KB |
 
-Fonts and CSS are separate from these figures. Actual download sizes depend on the host’s compression settings. Run `npm run size` to update the report. The build fails if the gallery JavaScript exceeds 18.5 KB with gzip, or all JavaScript exceeds 21 KB with gzip. These limits include the profile lookup, avatar icon, and progressive loading.
+Fonts and CSS are separate from these figures. Actual download sizes depend on the host’s compression settings. Run `npm run size` to update the report. Gzip limits are 10 KB for the home page, 12 KB with account lookup, 19.25 KB for a direct gallery, and 24 KB for all features. The build fails if it exceeds a limit.
 
 ## Checks
 
@@ -141,9 +148,9 @@ npm run check
 
 This runs ESLint, including Lit’s recommended rules; Stylelint; Prettier; tests; TypeScript; the production build; size limits; and production checks. Use `npm run format` to format the source, or `npm run lint` to run just the linters and format check. The GitHub Pages workflow also passes `actionlint`.
 
-Tests cover account lookup, progressive page loading, profile links, avatar icons and fallbacks, layout, image loading, lightbox controls, swipe and tap gestures, saved choices, font loading, Pages routes, shared photo links, and Back/Forward navigation. They also check failures, retries, and cancelling requests. Happy DOM runs the checks without opening a browser.
+Tests cover account lookup and suggestions, typing delays, keyboard and click selection, progressive page loading, profile links, avatar icons and fallbacks, layout, image loading, lightbox controls, swipe and tap gestures, saved choices, font loading, Pages routes, shared photo links, and Back/Forward navigation. They also check failures, retries, caching, and cancelling requests. Happy DOM runs the checks without opening a browser.
 
-The production checks run the built JavaScript with sample account data from the home page, a direct portfolio link, and a shared photo link. They check concurrent font and data loading, profile links, avatar icons, included licenses, the Pages redirect, lightbox behavior, and browser history.
+The production checks run the built JavaScript with sample account data from the home page, a direct portfolio link, and a shared photo link. They check that account lookup loads only when needed, concurrent font and data loading, profile links, avatar icons, included licenses, the Pages redirect, lightbox behavior, and browser history.
 
 ## License
 
