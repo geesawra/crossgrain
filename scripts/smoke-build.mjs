@@ -165,7 +165,7 @@ try {
   window.document.head.innerHTML = favicon;
   assert.equal(
     window.document.querySelector('link[rel="icon"]').getAttribute('href'),
-    `${base}favicon.png?v=2`,
+    `${base}favicon.png?v=3`,
   );
   assert.equal(window.document.querySelector('link[rel="icon"]').type, 'image/png');
   const png = readFileSync('dist/favicon.png');
@@ -215,14 +215,14 @@ try {
   assert.equal(readFileSync('dist/.nojekyll', 'utf8'), '');
   const notFound = readFileSync('dist/404.html', 'utf8');
   assert(notFound.includes('<title>crossgrain</title>'));
-  assert(notFound.includes(`<link rel="icon" type="image/png" href="${base}favicon.png?v=2">`));
+  assert(notFound.includes(`<link rel="icon" type="image/png" href="${base}favicon.png?v=3">`));
   for (const markup of [html, notFound]) {
     const page = new window.DOMParser().parseFromString(markup, 'text/html');
     const meta = (property) => page.querySelector(`meta[property="${property}"]`)?.content;
     assert.equal(meta('og:title'), 'crossgrain');
     assert.equal(meta('og:type'), 'website');
     assert.equal(meta('og:description'), 'A gallery viewer for your grain.social photos.');
-    assert.equal(meta('og:image'), `${siteUrl}social-card.png`);
+    assert.equal(meta('og:image'), `${siteUrl}social-card.png?v=2`);
     assert.equal(meta('og:image:type'), 'image/png');
     assert.equal(meta('og:image:width'), '1200');
     assert.equal(meta('og:image:height'), '630');
@@ -286,12 +286,12 @@ try {
   assert.equal(app.querySelector('.gallery-loading')?.getAttribute('aria-hidden'), 'true');
   assert.equal(app.querySelector('h1 a'), null, 'A slow optional profile must not delay photos');
   const icon = window.document.querySelector('link[rel="icon"]');
-  assert.equal(icon.getAttribute('href'), `${base}favicon.png?v=2`);
+  assert.equal(icon.getAttribute('href'), `${base}favicon.png?v=3`);
   releaseProfile();
   await until(() => app.querySelector('h1 a') && avatars.length === 1);
   assert.equal(app.querySelector('h1 a').href, `https://bsky.app/profile/${did}`);
   assert.equal(avatars[0].src, avatar);
-  assert.equal(icon.getAttribute('href'), `${base}favicon.png?v=2`);
+  assert.equal(icon.getAttribute('href'), `${base}favicon.png?v=3`);
   avatars[0].dispatchEvent(new Event('load'));
   await until(() => icon.href === avatar);
   assert.equal(icon.type, 'image/jpeg');
@@ -388,7 +388,7 @@ try {
   assert(homeCredit.textContent.includes(`© ${new Date().getFullYear()} geesawra`));
   assert.equal(homeCredit.querySelector('a').href, 'https://github.com/geesawra/crossgrain');
   assert.equal(window.document.title, 'crossgrain');
-  assert.equal(icon.getAttribute('href'), `${base}favicon.png?v=2`);
+  assert.equal(icon.getAttribute('href'), `${base}favicon.png?v=3`);
   assert.equal(icon.type, 'image/png');
   console.log(
     `Production ${sharedPhoto ? 'photo link' : direct ? 'direct link' : 'home'} verified at ${base}: lazy account lookup, concurrent fonts and data, progressive gallery, optional profile link, avatar favicon and fallback, licenses, Pages redirect, lightbox controls, shared URLs, and Back/Forward. No browser launched.`,

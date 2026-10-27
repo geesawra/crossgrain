@@ -28,7 +28,7 @@ function createImage() {
 beforeEach(() => {
   setFavicon();
   images = [];
-  dom.document.head.innerHTML = '<link rel="icon" type="image/png" href="/favicon.png?v=2">';
+  dom.document.head.innerHTML = '<link rel="icon" type="image/png" href="/favicon.png?v=3">';
   dom.Image = class {
     constructor() {
       const image = createImage();
