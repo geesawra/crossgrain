@@ -1,4 +1,4 @@
-const fallback = `${import.meta.env?.BASE_URL || '/'}favicon.svg`;
+const fallback = `${import.meta.env?.BASE_URL || '/'}favicon.png`;
 let pending: HTMLImageElement | undefined;
 let current: HTMLLinkElement | null;
 let source: string | undefined;
@@ -14,7 +14,7 @@ export function setFavicon(avatar?: string) {
     pending = undefined;
   }
   icon.href = fallback;
-  icon.type = 'image/svg+xml';
+  icon.type = 'image/png';
   if (!avatar) return;
   const image = (pending = new window.Image());
   image.onload = async () => {

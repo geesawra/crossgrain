@@ -158,7 +158,20 @@ async function until(predicate) {
   }
 }
 try {
-  window.document.head.innerHTML = `<link rel="icon" type="image/svg+xml" href="${base}favicon.svg">`;
+  const html = readFileSync('dist/index.html', 'utf8');
+  const favicon = html.match(/<link[^>]+rel="icon"[^>]*>/)?.[0];
+  assert(favicon);
+  window.document.head.innerHTML = favicon;
+  assert.equal(
+    window.document.querySelector('link[rel="icon"]').getAttribute('href'),
+    `${base}favicon.png`,
+  );
+  assert.equal(window.document.querySelector('link[rel="icon"]').type, 'image/png');
+  const png = readFileSync('dist/favicon.png');
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(png.readUInt32BE(16), 64);
+  assert.equal(png.readUInt32BE(20), 64);
+  assert.deepEqual(png, readFileSync('public/favicon.png'));
   window.document.body.innerHTML = '<crossgrain-app></crossgrain-app>';
   const manifest = JSON.parse(readFileSync('dist/.vite/manifest.json', 'utf8'));
   await import(pathToFileURL(resolve('dist', manifest['index.html'].file)).href);
@@ -187,7 +200,6 @@ try {
   ).file;
   const fontFile = readFileSync(resolve('dist', fontPath));
   assert.equal(fontFile.subarray(0, 4).toString(), 'wOF2');
-  const html = readFileSync('dist/index.html', 'utf8');
   assert(html.includes('<title>crossgrain</title>'));
   assert(html.includes(`href="${base}${fontPath}" as="font"`));
   assert(nextFont.source.includes(fontPath));
@@ -202,6 +214,7 @@ try {
   assert.equal(readFileSync('dist/.nojekyll', 'utf8'), '');
   const notFound = readFileSync('dist/404.html', 'utf8');
   assert(notFound.includes('<title>crossgrain</title>'));
+  assert(notFound.includes(`<link rel="icon" type="image/png" href="${base}favicon.png">`));
   let redirected = '';
   runInNewContext(notFound.match(/<script>([\s\S]*?)<\/script>/)[1], {
     location: {
@@ -253,12 +266,12 @@ try {
   assert.equal(app.querySelector('.gallery-loading')?.getAttribute('aria-hidden'), 'true');
   assert.equal(app.querySelector('h1 a'), null, 'A slow optional profile must not delay photos');
   const icon = window.document.querySelector('link[rel="icon"]');
-  assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
+  assert.equal(icon.getAttribute('href'), `${base}favicon.png`);
   releaseProfile();
   await until(() => app.querySelector('h1 a') && avatars.length === 1);
   assert.equal(app.querySelector('h1 a').href, `https://bsky.app/profile/${did}`);
   assert.equal(avatars[0].src, avatar);
-  assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
+  assert.equal(icon.getAttribute('href'), `${base}favicon.png`);
   avatars[0].dispatchEvent(new Event('load'));
   await until(() => icon.href === avatar);
   assert.equal(icon.type, 'image/jpeg');
@@ -355,8 +368,8 @@ try {
   assert(homeCredit.textContent.includes(`© ${new Date().getFullYear()} geesawra`));
   assert.equal(homeCredit.querySelector('a').href, 'https://github.com/geesawra/crossgrain');
   assert.equal(window.document.title, 'crossgrain');
-  assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
-  assert.equal(icon.type, 'image/svg+xml');
+  assert.equal(icon.getAttribute('href'), `${base}favicon.png`);
+  assert.equal(icon.type, 'image/png');
   console.log(
     `Production ${sharedPhoto ? 'photo link' : direct ? 'direct link' : 'home'} verified at ${base}: lazy account lookup, concurrent fonts and data, progressive gallery, optional profile link, avatar favicon and fallback, licenses, Pages redirect, lightbox controls, shared URLs, and Back/Forward. No browser launched.`,
   );

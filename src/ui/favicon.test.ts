@@ -28,7 +28,7 @@ function createImage() {
 beforeEach(() => {
   setFavicon();
   images = [];
-  dom.document.head.innerHTML = '<link rel="icon" type="image/svg+xml" href="/favicon.svg">';
+  dom.document.head.innerHTML = '<link rel="icon" type="image/png" href="/favicon.png">';
   dom.Image = class {
     constructor() {
       const image = createImage();
@@ -46,11 +46,11 @@ const icon = () => dom.document.querySelector<HTMLLinkElement>('link[rel="icon"]
 describe('account favicon', () => {
   it('keeps our icon until the avatar loads and decodes, then reuses it', async () => {
     setFavicon(avatar);
-    assert.equal(new URL(icon().href).pathname, '/favicon.svg');
+    assert.equal(new URL(icon().href).pathname, '/favicon.png');
     assert.equal(images[0].src, avatar);
     const loading = images[0].onload!();
     await Promise.resolve();
-    assert.equal(new URL(icon().href).pathname, '/favicon.svg');
+    assert.equal(new URL(icon().href).pathname, '/favicon.png');
     images[0].ready();
     await loading;
     assert.equal(icon().href, avatar);
@@ -61,13 +61,13 @@ describe('account favicon', () => {
   it('keeps our icon when an avatar request or decoding fails', async () => {
     setFavicon(avatar);
     images[0].onerror!();
-    assert.equal(new URL(icon().href).pathname, '/favicon.svg');
+    assert.equal(new URL(icon().href).pathname, '/favicon.png');
     setFavicon(`${avatar}?different`);
     const loading = images[1].onload!();
     images[1].fail(new Error('Broken JPEG'));
     await loading;
-    assert.equal(new URL(icon().href).pathname, '/favicon.svg');
-    assert.equal(icon().type, 'image/svg+xml');
+    assert.equal(new URL(icon().href).pathname, '/favicon.png');
+    assert.equal(icon().type, 'image/png');
   });
   it('restores our icon on home and ignores an old account’s late image', async () => {
     setFavicon(avatar);
@@ -75,15 +75,15 @@ describe('account favicon', () => {
     setFavicon();
     images[0].ready();
     await loading;
-    assert.equal(new URL(icon().href).pathname, '/favicon.svg');
+    assert.equal(new URL(icon().href).pathname, '/favicon.png');
     setFavicon(avatar);
     const loaded = images[1].onload!();
     images[1].ready();
     await loaded;
     assert.equal(icon().href, avatar);
     setFavicon();
-    assert.equal(new URL(icon().href).pathname, '/favicon.svg');
-    assert.equal(icon().type, 'image/svg+xml');
+    assert.equal(new URL(icon().href).pathname, '/favicon.png');
+    assert.equal(icon().type, 'image/png');
   });
   it('does not let a stale avatar replace the next account’s avatar', async () => {
     setFavicon(avatar);

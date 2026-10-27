@@ -28,7 +28,7 @@ export default defineConfig({
           type: 'asset',
           fileName: '404.html',
           source: await minify(
-            `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff;color-scheme:light dark}@media(prefers-color-scheme:dark){html{background:#111}}</style><title>crossgrain</title><script>location.replace(${JSON.stringify(base)}+'?__crossgrain_route='+encodeURIComponent(location.pathname+location.search+location.hash))</script></head><body><noscript>Enable JavaScript to open this gallery.</noscript></body></html>`,
+            `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:#fff;color-scheme:light dark}@media(prefers-color-scheme:dark){html{background:#111}}</style><link rel="icon" type="image/png" href="${base}favicon.png"><title>crossgrain</title><script>location.replace(${JSON.stringify(base)}+'?__crossgrain_route='+encodeURIComponent(location.pathname+location.search+location.hash))</script></head><body><noscript>Enable JavaScript to open this gallery.</noscript></body></html>`,
             { collapseWhitespace: true, minifyCSS: true, minifyJS: true },
           ),
         });
