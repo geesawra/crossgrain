@@ -227,8 +227,8 @@ try {
     assert.equal(meta('og:image:width'), '1200');
     assert.equal(meta('og:image:height'), '630');
     assert(meta('og:image:alt'));
-    // A gallery redirect must not tell crawlers to replace its URL with the home page.
-    assert.equal(meta('og:url'), markup === html ? siteUrl : undefined);
+    // Either page can open a gallery, so its preview must preserve the requested URL.
+    assert.equal(meta('og:url'), undefined);
   }
   const socialCard = readFileSync('dist/social-card.png');
   assert.equal(socialCard.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');

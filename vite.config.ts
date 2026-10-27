@@ -51,21 +51,15 @@ export default defineConfig({
       transformIndexHtml: {
         order: 'post',
         handler: (html) =>
-          minify(
-            html.replace(
-              '</head>',
-              `${socialMetadata}<meta property="og:url" content="${siteUrl.href}"></head>`,
-            ),
-            {
-              collapseWhitespace: true,
-              removeComments: true,
-              removeRedundantAttributes: true,
-              removeScriptTypeAttributes: true,
-              removeStyleLinkTypeAttributes: true,
-              minifyCSS: true,
-              minifyJS: true,
-            },
-          ),
+          minify(html.replace('</head>', `${socialMetadata}</head>`), {
+            collapseWhitespace: true,
+            removeComments: true,
+            removeRedundantAttributes: true,
+            removeScriptTypeAttributes: true,
+            removeStyleLinkTypeAttributes: true,
+            minifyCSS: true,
+            minifyJS: true,
+          }),
       },
     },
   ],
