@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Masonry from './components/Masonry';
-import PhotoCard from './components/PhotoCard';
+import GalleryGroup from './components/GalleryGroup';
 import PhotoLightbox from './components/PhotoLightbox';
-import { appendPortfolioPage, GalleryError, loadPortfolio, loadPortfolioPage, normalizeActor } from './lib/grain';
+import { appendPortfolioPage, GalleryError, loadPortfolio, loadPortfolioPage, groupPhotos, normalizeActor } from './lib/grain';
 import type { Photo, Portfolio } from './lib/grain';
 import { actorFromPath, galleryPath } from './lib/routes';
 
 const portfolioCache = new Map<string, { data: Portfolio; time: number }>();
-const pageSize = 36;
 
 function routeActor(): string {
   return typeof window === 'undefined' ? '' : actorFromPath(window.location.pathname);
@@ -45,7 +44,6 @@ function Gallery({ actor, onHome }: { actor: string; onHome: () => void }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
-  const [visible, setVisible] = useState(pageSize);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -111,23 +109,24 @@ function Gallery({ actor, onHome }: { actor: string; onHome: () => void }) {
     document.title = portfolio ? `${portfolio.identity.handle} — Photoshow` : 'Photoshow';
   }, [portfolio]);
 
-  const photos = useMemo(() => portfolio?.photos || [], [portfolio]);
+  const groups = useMemo(() => groupPhotos(portfolio?.photos || []), [portfolio]);
+  const photos = useMemo(() => groups.flatMap(group => group.photos), [groups]);
+  const eagerIds = useMemo(() => new Set(photos.slice(0, 4).map(photo => photo.id)), [photos]);
   const openPhoto = useCallback((photo: Photo) => setActiveId(photo.id), []);
-  const items = useMemo(() => photos.slice(0, visible).map((photo, index) => ({
-    id: photo.id, content: <PhotoCard photo={photo} index={index} onOpen={openPhoto} />,
-  })), [photos, visible, openPhoto]);
+  const items = useMemo(() => groups.map(group => ({
+    id: group.id, content: <GalleryGroup group={group} eagerIds={eagerIds} onOpen={openPhoto} />,
+  })), [groups, eagerIds, openPhoto]);
 
   useEffect(() => {
     const element = sentinel.current;
     if (!element || moreError) return;
     const observer = new IntersectionObserver(entries => {
       if (!entries.some(entry => entry.isIntersecting)) return;
-      if (visible < photos.length) setVisible(count => Math.min(count + pageSize, photos.length));
-      else void loadMore();
+      void loadMore();
     }, { rootMargin: '1200px' });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [visible, photos.length, portfolio?.cursor, moreError, loadMore]);
+  }, [groups.length, portfolio?.cursor, moreError, loadMore]);
 
   const activeIndex = photos.findIndex(photo => photo.id === activeId);
   const hasMore = !!portfolio?.cursor;
@@ -135,18 +134,16 @@ function Gallery({ actor, onHome }: { actor: string; onHome: () => void }) {
     const index = activeIndex + 1;
     const data = index < photos.length ? portfolio : await loadMore();
     if (controller.current?.signal.aborted) return;
-    if (data && index < data.photos.length) {
-      setActiveId(currentId => currentId === activeId ? data.photos[index].id : currentId);
-      setVisible(count => Math.max(count, index + 1));
-    }
+    const nextPhotos = data ? groupPhotos(data.photos).flatMap(group => group.photos) : [];
+    if (index < nextPhotos.length) setActiveId(currentId => currentId === activeId ? nextPhotos[index].id : currentId);
   }
 
   return <main className="gallery" aria-label="Photographs" aria-busy={status === 'loading'}>
     {status === 'loading' && <p className="gallery-state" role="status">Loading photos…</p>}
     {status === 'error' && <div className="gallery-state"><p role="alert">{error}</p><div className="state-actions"><button onClick={() => setRetry(value => value + 1)}>Retry</button><button onClick={onHome}>Change account</button></div></div>}
     {status === 'ready' && <>
-      {photos.length ? <Masonry items={items} /> : <div className="gallery-state"><p>{hasMore ? 'Loading photos…' : 'No public Grain photos.'}</p>{!hasMore && <button onClick={onHome}>Change account</button>}</div>}
-      {(visible < photos.length || hasMore) && <div ref={sentinel} className="gallery-sentinel" aria-hidden="true" />}
+      {photos.length ? <Masonry items={items} variant="galleries" /> : <div className="gallery-state"><p>{hasMore ? 'Loading photos…' : 'No public Grain photos.'}</p>{!hasMore && <button onClick={onHome}>Change account</button>}</div>}
+      {hasMore && <div ref={sentinel} className="gallery-sentinel" aria-hidden="true" />}
       {loadingMore && <p className="pagination-status" role="status">Loading photos…</p>}
       {moreError && <div className="pagination-status"><p role="alert">{moreError}</p><button onClick={() => void loadMore()}>Retry</button></div>}
     </>}

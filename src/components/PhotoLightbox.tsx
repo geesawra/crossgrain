@@ -43,7 +43,6 @@ export default function PhotoLightbox({ photo, canPrevious, canNext, loadingNext
     ['Lens', photo.exif?.lensModel || photo.exif?.lensMake || ''],
     ...formatExif(photo.exif).map(value => [value.endsWith('mm') ? 'Focal length' : value.startsWith('ƒ/') ? 'Aperture' : value.startsWith('ISO ') ? 'ISO' : 'Exposure', value.replace(/^ISO /, '')]),
     ['Taken', timestamp(photo.takenAt || '')],
-    ['Posted', timestamp(photo.publishedAt)],
   ].filter(([, value]) => value);
 
   return <dialog ref={dialog} className="lightbox" aria-label={photo.title || 'Photograph'} onClose={() => { if (!dialog.current?.open) onClose(); }}
@@ -59,8 +58,8 @@ export default function PhotoLightbox({ photo, canPrevious, canNext, loadingNext
       <button className="lightbox-close" onClick={() => dialog.current?.close()} aria-label="Close photo" autoFocus>×</button>
       <div className="lightbox-image"><LightboxImage photo={photo} key={photo.id} /></div>
       <div className="lightbox-details" id={detailsId} hidden={!showDetails}>
-        {photo.title && <p className="lightbox-caption">{photo.title}</p>}
-        {photo.description && photo.description !== photo.title && <p className="lightbox-description">{photo.description}</p>}
+        {(photo.caption || photo.title) && <p className="lightbox-caption">{photo.caption || photo.title}</p>}
+        {photo.description && photo.description !== photo.caption && <p className="lightbox-description">{photo.description}</p>}
         {fields.length > 0 && <dl className="lightbox-metadata">{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
         <a className="grain-link" href={photo.href} target="_blank" rel="noopener noreferrer">View on Grain ↗</a>
         {loadingNext && <p className="lightbox-status" role="status">Loading more photos…</p>}

@@ -48,9 +48,11 @@ Metadata for the next page is fetched near the bottom of the loaded gallery, or 
 
 Only published galleries are included. Unattached uploads, discarded drafts, private galleries, and authenticated group spaces are outside the scope of this public gallery.
 
-EXIF numbers use Grain’s scale of 1,000,000, including ISO. The displayed date is the capture date when available, otherwise the post date; hovering the date reveals its full local timestamp. Shared camera details appear as a small line in the caption. Missing values are omitted. Self-labelled sensitive photographs require a tap to reveal.
+EXIF numbers use Grain’s scale of 1,000,000, including ISO. Only capture dates are displayed; post timestamps are used internally for ordering. Hovering a capture date reveals its full local timestamp. Shared camera details appear as a small line in the caption. Missing values are omitted. Self-labelled sensitive photographs require a tap to reveal.
 
-The gallery consists of photographs and captions, without navigation, profile headers, branding, toolbars, or a footer. The background and text follow the OS light/dark preference. Each new page appears newest first in a masonry layout: each card goes into the shortest column, with its original proportions. Identical card heights can naturally align. More photographs appear automatically as the visitor scrolls. Data is cached in memory for five minutes. Nothing is persisted, and there are no analytics or remote font requests.
+The gallery has no site navigation, profile header, branding, toolbar, or footer. Photos are grouped by their Grain gallery, with a single title and description above each group. Each group has a masonry photo layout, and the groups themselves occupy a second masonry layout. A thin separator and whitespace distinguish galleries. Photo captions contain only photo-specific text, capture dates, and camera details.
+
+The background and text follow the OS light/dark preference. Each new page appears newest first; each masonry item goes into the shortest column, with photos retaining their original proportions. Identical card heights can naturally align. More galleries appear automatically as the visitor scrolls. Data is cached in memory for five minutes. Nothing is persisted, and there are no analytics or remote font requests.
 
 Images reserve their aspect ratio and fade in only after loading and decoding, without shifting the layout. Reduced-motion preferences disable the transition. The lightbox fills nearly the whole viewport, supports arrow-key navigation and Escape, and lets viewers hide the metadata to give the image the full width. Metadata visibility stays as selected while navigating photos in the open lightbox.
 

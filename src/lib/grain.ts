@@ -35,6 +35,7 @@ export interface Photo {
   height: number;
   title: string;
   description: string;
+  caption: string;
   publishedAt: string;
   takenAt?: string;
   href: string;
@@ -44,6 +45,12 @@ export interface Photo {
   contentWarning?: string;
 }
 export interface Identity { did: string; pds: string; handle: string }
+export interface PhotoGroup {
+  id: string;
+  title: string;
+  description: string;
+  photos: Photo[];
+}
 export interface PortfolioPage {
   photos: Photo[];
   cursor?: string;
@@ -211,7 +218,8 @@ export function buildPhotos(identity: Identity, photos: RecordEntry<PhotoRecord>
       id: uri, src, fullSrc, originalSrc, width, height,
       alt: value.alt || gallery.title || 'Photograph from Grain',
       title: gallery.title || '',
-      description: gallery.description || value.alt || '',
+      description: gallery.description || '',
+      caption: value.alt || '',
       publishedAt: value.createdAt || gallery.createdAt || '',
       takenAt: exif?.dateTimeOriginal,
       href: `https://grain.social/profile/${encodeURIComponent(identity.did)}/gallery/${encodeURIComponent(item.gallery.split('/').at(-1)!)}`,
@@ -301,6 +309,19 @@ export function appendPortfolioPage(portfolio: Portfolio, page: PortfolioPage): 
     ...portfolio, cursor: page.cursor, photos: [...photos.values()],
     seenCursors: page.cursor ? [...portfolio.seenCursors, page.cursor] : portfolio.seenCursors,
   };
+}
+
+export function groupPhotos(photos: Photo[]): PhotoGroup[] {
+  const groups = new Map<string, PhotoGroup>();
+  for (const photo of photos) {
+    let group = groups.get(photo.galleryId);
+    if (!group) {
+      group = { id: photo.galleryId, title: photo.title, description: photo.description, photos: [] };
+      groups.set(photo.galleryId, group);
+    }
+    group.photos.push(photo);
+  }
+  return [...groups.values()];
 }
 
 export function dateValue(date: string): number {

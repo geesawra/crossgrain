@@ -1,6 +1,6 @@
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { appendPortfolioPage, blobUrl, buildPhotos, cameraName, cdnImageUrl, didDocumentUrl, formatDate, formatExif, GALLERY_PAGE_SIZE, loadPortfolio, loadPortfolioPage, normalizeActor, resolveIdentity } from './grain.ts';
+import { appendPortfolioPage, blobUrl, buildPhotos, cameraName, cdnImageUrl, didDocumentUrl, formatDate, formatExif, GALLERY_PAGE_SIZE, groupPhotos, loadPortfolio, loadPortfolioPage, normalizeActor, resolveIdentity } from './grain.ts';
 import type { ExifRecord, Identity, RecordEntry } from './grain.ts';
 import { actorFromPath, galleryPath } from './routes.ts';
 
@@ -65,6 +65,7 @@ describe('Grain photo aggregation', () => {
     assert.equal(result.length, 1);
     assert.equal(result[0].title, 'By the water');
     assert.equal(result[0].description, 'A quiet afternoon.');
+    assert.equal(result[0].caption, 'The sea in winter');
     assert.equal(result[0].alt, 'The sea in winter');
     assert.equal(result[0].takenAt, exif.dateTimeOriginal);
     assert.equal(result[0].publishedAt, photos[0].value.createdAt);
@@ -83,10 +84,23 @@ describe('Grain photo aggregation', () => {
     assert.equal(buildPhotos(identity, photos, [], items, []).length, 0);
     assert.equal(buildPhotos(identity, photos, galleries, [...items, ...items], []).length, 1);
   });
-  it('uses alt text as a description when a post has no description', () => {
+  it('keeps photo captions separate from the gallery description', () => {
     const result = buildPhotos(identity, photos, [entry(galleryUri, { title: 'The sea' })], items, []);
-    assert.equal(result[0].description, 'The sea in winter');
+    assert.equal(result[0].description, '');
+    assert.equal(result[0].caption, 'The sea in winter');
     assert.equal(result[0].camera, '');
+  });
+  it('groups photos by gallery, with one shared title and description', () => {
+    const [photo] = buildPhotos(identity, photos, galleries, items, []);
+    const other = { ...photo, id: 'other-photo', galleryId: 'other-gallery', title: 'Elsewhere', description: 'Another day.' };
+    const second = { ...photo, id: 'second-photo', caption: 'A second view' };
+    const groups = groupPhotos([photo, other, second]);
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].title, 'By the water');
+    assert.equal(groups[0].description, 'A quiet afternoon.');
+    assert.deepEqual(groups[0].photos.map(item => item.id), [photo.id, 'second-photo']);
+    assert.equal(groups[1].id, 'other-gallery');
+    assert.equal(groups[1].photos[0].caption, 'The sea in winter');
   });
   it('preserves a post’s content warning', () => {
     const result = buildPhotos(identity, photos, [entry(galleryUri, { title: 'Photo', labels: { values: [{ val: 'nudity' }] } })], items, []);

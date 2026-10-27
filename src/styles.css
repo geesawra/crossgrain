@@ -43,6 +43,10 @@ button { cursor: pointer; }
 .masonry { position: relative; width: 100%; opacity: 0; }
 .masonry-ready { opacity: 1; }
 .masonry-item { position: absolute; top: 0; left: 0; }
+.gallery-group { border-top: 1px solid var(--line); padding-top: 14px; }
+.gallery-group-caption { margin-bottom: 20px; }
+.gallery-group-title { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
+.gallery-group-description { margin: 6px 0 0; font-size: 12px; line-height: 1.7; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
 .photo { margin: 0; }
 .photo-media { background: var(--placeholder); overflow: hidden; }
 .photo-open { display: block; height: 100%; width: 100%; border: 0; padding: 0; background: none; color: var(--muted); cursor: zoom-in; }
