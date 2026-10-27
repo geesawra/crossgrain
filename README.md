@@ -1,70 +1,128 @@
 # Photoshow
 
-A single-page photo portfolio for [Grain](https://grain.social). Give it a DID or handle and it arranges the account’s public photographs in a responsive masonry gallery, with captions, descriptions, dates, and available EXIF data. Clicking a photo opens a lightbox with its metadata and a link to the original Grain post.
+A personal photo gallery for [Grain](https://grain.social). Enter a handle or DID to see that account’s public photos. Photos keep their shape and stack into columns that fit your screen. Click a photo to open a lightbox with captions, camera settings, and a link to the Grain post.
 
-Built with React, TypeScript, and Vite. All data is fetched in the visitor’s browser. There is no application backend, account system, API key, or database.
+Photoshow runs entirely in your browser. It uses [Lit](https://lit.dev/) Web Components, TypeScript, and Vite. It needs no backend, sign-in, API key, or database. Lit is the only runtime dependency.
 
 ## Run locally
 
-Requires Node.js 22.18 or newer.
+Use Node.js 24 or newer.
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite. The home page contains a handle/DID input and an Open button. It makes no account requests and shows no photographs. Open your own portfolio with the form or visit:
+Open the URL printed by Vite. Enter your handle or DID, or open a gallery directly:
 
 ```text
 http://localhost:5173/did:plc:your-account-did
 ```
 
-Handles also work and are verified against the resolved DID document. Both `did:plc` and `did:web` are supported. The canonical, shareable gallery URL uses the DID.
+The home page shows only the input and an Open button. It does not load anyone’s photos until you choose an account. Both `did:plc` and `did:web` work. When you enter a handle, the app checks that it belongs to the account and changes the gallery URL to use its DID.
 
-## Production
+## Build and host
 
 ```sh
 npm run build
 npm run preview -- --port 4173
 ```
 
-The static output is in `dist/`. JavaScript is minified with Oxc, CSS with Lightning CSS, and HTML with html-minifier-terser. The app uses system fonts and source maps are disabled. Photos load through Bluesky’s CDN with thumbnail and high-density variants, preserving their original aspect ratios. If a CDN image fails, it falls back once to the original on the owner’s data server. Images outside the initial view are lazy loaded.
+The build goes into `dist/`. JavaScript, CSS, HTML, Lit templates, and the build manifest are minified. Source maps are turned off. The build includes the code, font, and Lit licenses. Both local servers listen on `0.0.0.0`, so other devices on your network can reach them.
 
-Deploy `dist/` to any static host. The host must serve `index.html` for gallery URLs, such as `/did:plc:…`, so direct links and refreshes work. The included `public/_redirects` configures this on Netlify and Cloudflare Pages; the root `vercel.json` configures Vercel. For nginx:
+## GitHub Pages
 
-```nginx
-location / {
-    try_files $uri $uri/ /index.html;
-}
-```
+In your repository’s **Settings → Pages**, choose **GitHub Actions** as the source. Push to `main` or run the Pages workflow manually. The workflow installs dependencies, runs all checks, and deploys `dist/`. Pull requests run the checks without deploying.
 
-The production preview server already supports this fallback.
+The workflow reads the site path from GitHub Pages. Account sites, custom domains, and project paths such as `https://you.github.io/photoshow/` all use the right asset and gallery URLs.
 
-## Data and behavior
+GitHub Pages serves `404.html` for direct gallery links. That page redirects to the app, which restores the original gallery URL before showing any text. This also works when you refresh a gallery. The site includes `.nojekyll` so Pages serves the built files as they are.
 
-The browser resolves a DID through `plc.directory` or its `did:web` document and discovers its HTTPS Personal Data Server. It reads `social.grain.gallery` records in pages of three posts using `com.atproto.repo.listRecords`. For just those posts, Grain’s public `social.grain.unspecced.getGallery` API supplies the referenced photo metadata and EXIF. The browser does not scan the complete photo, attachment, or EXIF collections.
-
-Metadata for the next page is fetched near the bottom of the loaded gallery, or when advancing beyond the last loaded photo in the lightbox. Failed requests retain the current photographs and cursor for retry; duplicate photos and repeated cursor cycles are detected. This depends on the public Grain API being available and having indexed the posts. There is no Photoshow backend.
-
-Only published galleries are included. Unattached uploads, discarded drafts, private galleries, and authenticated group spaces are outside the scope of this public gallery.
-
-EXIF numbers use Grain’s scale of 1,000,000, including ISO. Only capture dates are displayed; post timestamps are used internally for ordering. Hovering a capture date reveals its full local timestamp. Shared camera details appear as a small line in the caption. Missing values are omitted. Self-labelled sensitive photographs require a tap to reveal.
-
-The gallery has no site navigation, profile header, branding, toolbar, or footer. Photos are grouped by their Grain gallery, with a single title and description above each group. Each group has a masonry photo layout, and the groups themselves occupy a second masonry layout. A thin separator and whitespace distinguish galleries. Photo captions contain only photo-specific text, capture dates, and camera details.
-
-The background and text follow the OS light/dark preference. Each new page appears newest first; each masonry item goes into the shortest column, with photos retaining their original proportions. Identical card heights can naturally align. More galleries appear automatically as the visitor scrolls. Data is cached in memory for five minutes. Nothing is persisted, and there are no analytics or remote font requests.
-
-Images reserve their aspect ratio and fade in only after loading and decoding, without shifting the layout. Reduced-motion preferences disable the transition. The lightbox fills nearly the whole viewport, supports arrow-key navigation and Escape, and lets viewers hide the metadata to give the image the full width. Metadata visibility stays as selected while navigating photos in the open lightbox.
-
-The lightbox requests the original-resolution file from the owner’s data server. A small loading indicator stays visible until the image is fully decoded, then the image fades in. If the original fails, it tries the large CDN version once. The gallery continues to use CDN thumbnails.
-
-Only the account explicitly requested in the URL or form is loaded. There are no demo, featured, or suggested accounts. As with any fully client-side site, the account’s data server must permit cross-origin browser requests. Connection failures and empty galleries have simple status messages.
-
-## Verify
+To check a project-path build locally:
 
 ```sh
-npm test
-npm run build
+PAGES_BASE_PATH=/photoshow/ npm run build
+PAGES_BASE_PATH=/photoshow/ npm run test:build
+npm run preview -- --port 4173
 ```
 
-The tests cover DID and handle verification, no requests without an explicit account, CDN URLs, photo/gallery/EXIF joins, EXIF conversion, metadata page boundaries, retries, deduplication, repeated cursor detection, and cancelled requests. They do not launch a browser.
+Open `http://localhost:4173/photoshow/`. Run `npm run build` again to return to a build at `/`.
+
+## The gallery
+
+Each portfolio starts with “{handle}’s photography.” Each Grain gallery has one title and description above its photos. Photos stack into columns within each gallery, and the galleries stack into columns too. The page background and text follow your device’s light or dark setting.
+
+The capture date appears beside each gallery name. Galleries with photos from different days show a date range. Missing or invalid capture dates are left out. Photo captions show the photo’s own text and available camera settings (EXIF). Post dates help sort photos but are not shown. Photos marked as sensitive need a tap before they appear.
+
+Photos load through Bluesky’s CDN, with larger versions for sharper screens. Images farther down the page load as you scroll. Each image keeps its space while loading and fades in once it is fully ready. If you prefer reduced motion, the fade is turned off. If a CDN image fails, the app tries the original file on the account’s data server.
+
+## The lightbox
+
+Click a photo to open it at full resolution. A loading indicator stays visible until the image is ready. If the original file fails, the app tries the large CDN version once.
+
+Use the arrows or your keyboard’s left and right keys to move between photos. On a touch screen, swipe left or right across the image. Vertical movements and pinch-to-zoom stay with the browser. Press Escape, click outside the lightbox, or use the close button to leave. The details panel shows captions, camera settings, and a link to the Grain post.
+
+Tap the image itself or use the details button to hide or show the details. Tapping the space around the photo does nothing. The pane slides and fades in or out; reduced-motion settings turn off the transition. That choice stays the same as you move between photos. Swiping does not toggle details. The image has space around it and a size limit, even when details are hidden. On mobile, the image and controls stay in place while the details scroll on their own. The details return to the top when you choose another photo. Exact capture timestamps stay in the lightbox.
+
+Two swatches beside the arrows let you choose a gray (`#777`) or white (`#fff`) image background. The background changes smoothly, or instantly if you prefer reduced motion. The swatches work when details are hidden too. The choice is saved in your browser. If saving is blocked, you can still change it for the current visit.
+
+The gray is close to L*50, the neutral middle gray recommended in [FADGI’s photo-viewing guidance, section 2.6.2](https://www.digitizationguidelines.gov/guidelines/FADGITechnicalGuidelinesforDigitizingCulturalHeritageMaterials_ThirdEdition_05092023.pdf#page=24). The white is plain, untinted white, also used in [Adobe Spectrum’s neutral palette](https://github.com/adobe/spectrum-design-data/blob/main/docs/markdown/tokens/color-palette.md). There is no single white value required for web lightboxes.
+
+## Fonts
+
+Photoshow uses two fonts from the [Atkinson Hyperlegible family](https://www.brailleinstitute.org/freefont/). The links below point to the original font projects and the license files included with the site.
+
+| Font                                                                                                                                                      | Used for                                                           | File size | License                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------: | ---------------------------------------------------------------------------- |
+| [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next/tree/7925f50f649b3813257faf2f4c0b381011f434f1/fonts/webfonts)      | General text, captions, and labels; upright weights 200–800        |  48.19 KB | [SIL Open Font License 1.1](public/fonts/OFL.txt)                            |
+| [Atkinson Hyperlegible Mono](https://github.com/googlefonts/atkinson-hyperlegible-next-mono/tree/154d50362016cc3e873eb21d242cd0772384c8f9/fonts/webfonts) | Camera settings, dates, and other technical values; regular weight |  22.33 KB | [SIL Open Font License 1.1](public/fonts/atkinson-hyperlegible-mono/OFL.txt) |
+
+In the lightbox, labels such as Camera and Lens use Next. Their values use Mono.
+
+The site hosts both WOFF2 files and makes no requests to a separate font service. Next starts loading with the page. Mono loads only when you open a gallery, while the account data loads. Text waits until its font is ready, so there is no visible font change or layout jump. If a font fails or takes more than three seconds, that text uses a system font for the rest of the visit. It will not switch fonts later.
+
+Both font files are unchanged. Each font’s original copyright notice (2020–2024) is included with its license.
+
+## How data loads
+
+The browser finds the account’s data server from its DID document. It reads `social.grain.gallery` records in pages of three using `com.atproto.repo.listRecords`. Grain’s public `social.grain.unspecced.getGallery` API supplies the photos and camera details for those galleries. The app does not download the account’s entire photo or EXIF history.
+
+The next page loads near the bottom of the gallery, or when you move past the last loaded photo in the lightbox. Failed requests keep the photos already shown and let you retry. The app skips duplicates and checks for repeated pages. It relies on Grain’s public API and the account’s data server being available. The data server must allow requests from other websites (CORS).
+
+Only public, published galleries are shown. Drafts, unattached uploads, private galleries, and private group spaces are not included. Grain stores EXIF numbers at a scale of 1,000,000, including ISO; the app converts them for display.
+
+Photo data stays in memory for five minutes so return visits are faster. Only the lightbox background choice is saved between visits, under `photoshow.lightbox.background` in browser storage. There are no analytics, demo accounts, or suggested accounts.
+
+## Code and size
+
+The custom elements share CSS and use the normal page DOM. Lit handles templates and reactive updates for the app, gallery, groups, cards, and lightbox. Small native elements handle masonry layout and image loading. `photo-show` handles the form and browser history. `photo-gallery` loads the data. `photo-lightbox` uses the browser’s modal dialog, with keyboard controls and focus restored on close.
+
+Lit templates run directly in JavaScript and need no template compiler. Vite bundles and minifies the production build; TypeScript checks the source.
+
+The home page loads only the code it needs. Gallery code loads when you open a gallery, and lightbox code loads on the first photo click. New pages add photos without replacing the images already on screen. Leaving a gallery cancels its pending requests. Captions are treated as plain text rather than HTML.
+
+Current JavaScript sizes:
+
+| JavaScript                      | Uncompressed |     gzip |   Brotli |
+| ------------------------------- | -----------: | -------: | -------: |
+| Home                            |     22.26 KB |  8.63 KB |  7.73 KB |
+| Gallery, before opening a photo |     43.15 KB | 16.44 KB | 14.72 KB |
+| Including the lightbox          |     50.42 KB | 19.12 KB | 17.01 KB |
+
+Fonts and CSS are separate from these figures. Actual download sizes depend on the host’s compression settings. Run `npm run size` to update the report. The build fails if the gallery JavaScript exceeds 18 KB with gzip, or all JavaScript exceeds 20 KB with gzip.
+
+## Checks
+
+```sh
+npm run check
+```
+
+This runs ESLint, including Lit’s recommended rules; Stylelint; Prettier; tests; TypeScript; the production build; size limits; and production checks. Use `npm run format` to format the source, or `npm run lint` to run just the linters and format check. The GitHub Pages workflow also passes `actionlint`.
+
+Tests cover account lookup, page loading, layout, image loading, lightbox controls, swipe and tap gestures, saved choices, font loading, and Pages routes. They also check failures, retries, and cancelling requests. Happy DOM runs the checks without opening a browser.
+
+The production checks run the built JavaScript with sample account data, both from the home page and through a direct gallery link. They check font readiness, deferred Mono loading, included licenses, the Pages redirect, and lightbox behavior.
+
+## License
+
+Photoshow’s code uses the [MIT License](LICENSE). [Lit](https://github.com/lit/lit) uses the [BSD 3-Clause License](public/licenses/lit-BSD-3-Clause.txt). The fonts keep their separate SIL Open Font License 1.1 licenses: [Next](public/fonts/OFL.txt) and [Mono](public/fonts/atkinson-hyperlegible-mono/OFL.txt).

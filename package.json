@@ -5,26 +5,40 @@
   "private": true,
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/bundle-size.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --experimental-strip-types --test src/lib/grain.test.ts"
+    "test": "node --experimental-strip-types --test src/lib/*.test.ts src/elements/*.test.ts src/ui/*.test.ts",
+    "size": "node scripts/bundle-size.mjs",
+    "test:build": "node scripts/smoke-build.mjs && node scripts/smoke-build.mjs --direct",
+    "lint:js": "eslint . --max-warnings 0",
+    "lint:css": "stylelint src/**/*.css",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "npm run lint:js && npm run lint:css && npm run format:check",
+    "check": "npm run lint && npm test && npm run build && npm run test:build"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "module",
-  "dependencies": {
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
-  },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@lit-labs/rollup-plugin-minify-html-literals": "^0.2.0",
     "@types/html-minifier-terser": "^7.0.2",
     "@types/node": "^26.6.5",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-lit": "^2.3.1",
+    "happy-dom": "^21.0.4",
     "html-minifier-terser": "^7.2.0",
-    "typescript": "^7.0.2",
+    "prettier": "^3.9.10",
+    "stylelint": "^17.16.0",
+    "stylelint-config-standard": "^40.0.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
   }
 }

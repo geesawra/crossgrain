@@ -1,0 +1,251 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
+import { runInNewContext } from 'node:vm';
+import { Window } from 'happy-dom';
+
+const base = (process.env.PAGES_BASE_PATH || '/').replace(/\/?$/, '/');
+const direct = process.argv.includes('--direct');
+const did = 'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa';
+const gallery = `at://${did}/social.grain.gallery/gallery1`;
+const photo = `at://${did}/social.grain.photo/photo1`;
+const directPath = `${base}${did}?view=all#photo`;
+const window = new Window({
+  url: `http://localhost:4173${base}${direct ? `?__photoshow_route=${encodeURIComponent(directPath)}` : ''}`,
+  settings: {
+    enableImageFileLoading: false,
+    enableJavaScriptEvaluation: false,
+    enableCSSFileLoading: false,
+  },
+});
+for (const key of [
+  'window',
+  'document',
+  'HTMLElement',
+  'Event',
+  'CustomEvent',
+  'KeyboardEvent',
+  'MouseEvent',
+  'MutationObserver',
+  'customElements',
+]) {
+  Object.defineProperty(globalThis, key, {
+    configurable: true,
+    value: key === 'window' ? window : window[key],
+  });
+}
+globalThis.requestAnimationFrame = window.requestAnimationFrame.bind(window);
+globalThis.cancelAnimationFrame = window.cancelAnimationFrame.bind(window);
+globalThis.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+globalThis.IntersectionObserver = class {
+  observe() {}
+  disconnect() {}
+};
+const fontFaces = [];
+const addedFonts = [];
+window.FontFace = class {
+  constructor(family, source, descriptors) {
+    this.family = family;
+    this.source = source;
+    this.descriptors = descriptors;
+    this.loaded = new Promise((resolve) => {
+      this.release = () => resolve(this);
+    });
+    fontFaces.push(this);
+  }
+  load() {
+    return this.loaded;
+  }
+};
+Object.defineProperty(window.document, 'fonts', {
+  value: { add: (face) => addedFonts.push(face) },
+});
+const requests = [];
+globalThis.fetch = async (input) => {
+  const url = new URL(String(input));
+  requests.push(url);
+  if (url.hostname === 'plc.directory')
+    return Response.json({
+      id: did,
+      alsoKnownAs: ['at://photographer.example'],
+      service: [
+        {
+          id: '#atproto_pds',
+          type: 'AtprotoPersonalDataServer',
+          serviceEndpoint: 'https://photos.example',
+        },
+      ],
+    });
+  if (url.hostname === 'photos.example')
+    return Response.json({
+      records: [
+        {
+          uri: gallery,
+          value: {
+            title: 'A collection',
+            description: 'A gallery caption',
+            createdAt: '2026-10-01T00:00:00Z',
+          },
+        },
+      ],
+    });
+  assert.equal(url.hostname, 'grain.social');
+  return Response.json({
+    gallery: {
+      uri: gallery,
+      items: [
+        {
+          uri: photo,
+          alt: 'An individual photo caption',
+          thumb: `https://cdn.bsky.app/img/feed_thumbnail/plain/${did}/bafkreiaaaaaaaaaaaaa@jpeg`,
+          fullsize: `https://cdn.bsky.app/img/feed_fullsize/plain/${did}/bafkreiaaaaaaaaaaaaa@jpeg`,
+          aspectRatio: { width: 1200, height: 1800 },
+          exif: {
+            photo,
+            make: 'FUJIFILM',
+            model: 'X-T5',
+            iSO: 400,
+            dateTimeOriginal: '2026-09-30T18:15:00Z',
+          },
+        },
+      ],
+    },
+  });
+};
+async function until(predicate) {
+  const deadline = Date.now() + 2000;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error('Built application did not finish rendering');
+    await new Promise(setImmediate);
+  }
+}
+try {
+  window.document.body.innerHTML = '<photo-show></photo-show>';
+  const manifest = JSON.parse(readFileSync('dist/.vite/manifest.json', 'utf8'));
+  await import(pathToFileURL(resolve('dist', manifest['index.html'].file)).href);
+  if (direct) {
+    assert.equal(
+      window.location.pathname + window.location.search + window.location.hash,
+      directPath,
+    );
+  }
+  assert.equal(window.document.querySelector('photo-show').children.length, 0);
+  assert.equal(addedFonts.length, 0);
+  assert.equal(requests.length, 0);
+  const nextFont = fontFaces[0];
+  assert.equal(nextFont.family, 'Atkinson Hyperlegible Next');
+  assert.equal(nextFont.descriptors.weight, '200 800');
+  const fontPath = Object.values(manifest).find(
+    (asset) => asset.file.includes('atkinson-hyperlegible-next-') && asset.file.endsWith('.woff2'),
+  ).file;
+  const fontFile = readFileSync(resolve('dist', fontPath));
+  assert.equal(fontFile.subarray(0, 4).toString(), 'wOF2');
+  const html = readFileSync('dist/index.html', 'utf8');
+  assert(html.includes(`href="${base}${fontPath}" as="font"`));
+  assert(nextFont.source.includes(fontPath));
+  assert.equal(readFileSync('dist/LICENSE', 'utf8'), readFileSync('LICENSE', 'utf8'));
+  for (const path of [
+    'fonts/OFL.txt',
+    'fonts/atkinson-hyperlegible-mono/OFL.txt',
+    'licenses/lit-BSD-3-Clause.txt',
+  ]) {
+    assert.equal(readFileSync(`dist/${path}`, 'utf8'), readFileSync(`public/${path}`, 'utf8'));
+  }
+  assert.equal(readFileSync('dist/.nojekyll', 'utf8'), '');
+  const notFound = readFileSync('dist/404.html', 'utf8');
+  let redirected = '';
+  runInNewContext(notFound.match(/<script>([\s\S]*?)<\/script>/)[1], {
+    location: {
+      pathname: `${base}${did}`,
+      search: '?view=all',
+      hash: '#photo',
+      replace: (target) => {
+        redirected = target;
+      },
+    },
+  });
+  assert.equal(redirected, `${base}?__photoshow_route=${encodeURIComponent(directPath)}`);
+  nextFont.release();
+  if (!direct) {
+    await until(() => window.document.querySelector('form'));
+    assert.equal(fontFaces.length, 1);
+    assert.equal(requests.length, 0);
+    window.document.querySelector('input').value = did;
+    window.document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    assert.equal(window.location.pathname, `${base}${did}`);
+  }
+  await until(() => fontFaces.length === 2 && requests.length === 3);
+  assert.equal(window.document.querySelector('photo-card'), null);
+  const monoFont = fontFaces[1];
+  assert.equal(monoFont.family, 'Atkinson Hyperlegible Mono');
+  assert.equal(monoFont.descriptors.weight, '400');
+  const monoPath = Object.values(manifest).find(
+    (asset) => asset.file.includes('atkinson-hyperlegible-mono-') && asset.file.endsWith('.woff2'),
+  ).file;
+  assert(monoFont.source.includes(monoPath));
+  assert.equal(readFileSync(resolve('dist', monoPath)).subarray(0, 4).toString(), 'wOF2');
+  monoFont.release();
+  await until(() => window.document.querySelector('photo-card'));
+  assert.deepEqual(addedFonts, [nextFont, monoFont]);
+  assert(window.document.querySelector('.photo-metadata').textContent.includes('FUJIFILM X-T5'));
+  assert.equal(
+    window.document.querySelector('h1')?.textContent,
+    'photographer.example’s photography',
+  );
+  assert.equal(window.document.querySelectorAll('.gallery-group-title').length, 1);
+  assert.equal(
+    window.document.querySelector('.gallery-group-heading time').dateTime,
+    '2026-09-30T18:15:00Z',
+  );
+  assert.equal(window.document.querySelectorAll('photo-card time').length, 0);
+  window.document.querySelector('.photo-open').click();
+  await until(() => window.document.querySelector('dialog')?.open);
+  const dialog = window.document.querySelector('dialog');
+  assert(
+    dialog
+      .querySelector('img')
+      .src.startsWith('https://photos.example/xrpc/com.atproto.sync.getBlob'),
+  );
+  assert(dialog.querySelector('.image-loading'));
+  const image = dialog.querySelector('img');
+  const white = dialog.querySelector('input[value="white"]');
+  white.checked = true;
+  white.dispatchEvent(new Event('change', { bubbles: true }));
+  await window.document.querySelector('photo-lightbox').updateComplete;
+  assert.equal(dialog.querySelector('.lightbox-image').dataset.background, 'white');
+  assert.equal(window.localStorage.getItem('photoshow.lightbox.background'), 'white');
+  assert.equal(dialog.querySelector('img'), image);
+  const viewer = window.document.querySelector('photo-lightbox');
+  const details = dialog.querySelector('.lightbox-details');
+  dialog.querySelector('.lightbox-image').click();
+  await viewer.updateComplete;
+  assert.equal(details.inert, false);
+  image.click();
+  await viewer.updateComplete;
+  assert.equal(details.inert, true);
+  assert.equal(details.getAttribute('aria-hidden'), 'true');
+  dialog.querySelector('.lightbox-details-toggle').click();
+  await viewer.updateComplete;
+  assert.equal(details.inert, false);
+  assert.equal(details.getAttribute('aria-hidden'), 'false');
+  assert.equal(dialog.querySelector('img'), image);
+  assert.equal(dialog.querySelector('.grain-link').hostname, 'grain.social');
+  dialog.querySelector('.lightbox-close').click();
+  assert.equal(window.document.body.style.overflow, '');
+  window.document.querySelector('.photo-open').click();
+  await until(() => dialog.open);
+  assert.equal(dialog.querySelector('input[value="white"]').checked, true);
+  dialog.querySelector('.lightbox-close').click();
+  assert.equal(requests.length, 3);
+  console.log(
+    `Production ${direct ? 'direct link' : 'home'} verified at ${base}: font readiness, deferred Mono, licenses, Pages redirect, DID loading, photography title, grouped photos, lazy lightbox, original image, loading indicator, saved background, details toggle, and close. No browser launched.`,
+  );
+} finally {
+  window.document.body.replaceChildren();
+  await window.happyDOM.close();
+}
