@@ -14,7 +14,7 @@ const photo = `at://${did}/social.grain.photo/photo1`;
 const fragment = sharedPhoto ? '#gallery=gallery1&photo=photo1' : '#portfolio';
 const directPath = `${base}${did}?view=all${fragment}`;
 const window = new Window({
-  url: `http://localhost:4173${base}${direct ? `?__photoshow_route=${encodeURIComponent(directPath)}` : ''}`,
+  url: `http://localhost:4173${base}${direct ? `?__crossgrain_route=${encodeURIComponent(directPath)}` : ''}`,
   settings: {
     enableImageFileLoading: false,
     enableJavaScriptEvaluation: false,
@@ -68,6 +68,20 @@ Object.defineProperty(window.document, 'fonts', {
   value: { add: (face) => addedFonts.push(face) },
 });
 const requests = [];
+let releaseProfile;
+const profileReady = new Promise((resolve) => {
+  releaseProfile = resolve;
+});
+const avatar = `https://cdn.bsky.app/img/avatar_thumbnail/plain/${did}/bafkreiaaaaa@jpeg`;
+const avatars = [];
+window.Image = class {
+  constructor() {
+    const image = window.document.createElement('img');
+    image.decode = () => Promise.resolve();
+    avatars.push(image);
+    return image;
+  }
+};
 globalThis.fetch = async (input) => {
   const url = new URL(String(input));
   requests.push(url);
@@ -91,8 +105,16 @@ globalThis.fetch = async (input) => {
       createdAt: '2026-10-01T00:00:00Z',
     },
   };
-  if (url.hostname === 'photos.example' && url.pathname.endsWith('/com.atproto.repo.getRecord'))
+  if (url.hostname === 'photos.example' && url.pathname.endsWith('/com.atproto.repo.getRecord')) {
+    if (url.searchParams.get('collection') === 'app.bsky.actor.profile') {
+      await profileReady;
+      return Response.json({
+        uri: `at://${did}/app.bsky.actor.profile/self`,
+        value: { $type: 'app.bsky.actor.profile', avatar: { ref: { $link: 'bafkreiaaaaa' } } },
+      });
+    }
     return Response.json(record);
+  }
   if (url.hostname === 'photos.example')
     return Response.json({
       records: [record],
@@ -128,7 +150,8 @@ async function until(predicate) {
   }
 }
 try {
-  window.document.body.innerHTML = '<photo-show></photo-show>';
+  window.document.head.innerHTML = `<link rel="icon" type="image/svg+xml" href="${base}favicon.svg">`;
+  window.document.body.innerHTML = '<crossgrain-app></crossgrain-app>';
   const manifest = JSON.parse(readFileSync('dist/.vite/manifest.json', 'utf8'));
   await import(pathToFileURL(resolve('dist', manifest['index.html'].file)).href);
   if (direct) {
@@ -137,9 +160,16 @@ try {
       directPath,
     );
   }
-  assert.equal(window.document.querySelector('photo-show').children.length, 0);
+  const app = window.document.querySelector('crossgrain-app');
+  await until(() => app.querySelector('main'));
+  assert.equal(app.hasAttribute('fonts-ready'), false);
+  assert.equal(app.inert, true);
   assert.equal(addedFonts.length, 0);
-  assert.equal(requests.length, 0);
+  assert(!app.textContent.includes('Loading'));
+  if (direct) {
+    await until(() => fontFaces.length === 2 && requests.length === 4);
+    assert.equal(app.querySelector('h1')?.textContent, 'photographer.example’s photography');
+  } else assert.equal(requests.length, 0);
   const nextFont = fontFaces[0];
   assert.equal(nextFont.family, 'Atkinson Hyperlegible Next');
   assert.equal(nextFont.descriptors.weight, '200 800');
@@ -149,6 +179,7 @@ try {
   const fontFile = readFileSync(resolve('dist', fontPath));
   assert.equal(fontFile.subarray(0, 4).toString(), 'wOF2');
   const html = readFileSync('dist/index.html', 'utf8');
+  assert(html.includes('<title>crossgrain</title>'));
   assert(html.includes(`href="${base}${fontPath}" as="font"`));
   assert(nextFont.source.includes(fontPath));
   assert.equal(readFileSync('dist/LICENSE', 'utf8'), readFileSync('LICENSE', 'utf8'));
@@ -161,6 +192,7 @@ try {
   }
   assert.equal(readFileSync('dist/.nojekyll', 'utf8'), '');
   const notFound = readFileSync('dist/404.html', 'utf8');
+  assert(notFound.includes('<title>crossgrain</title>'));
   let redirected = '';
   runInNewContext(notFound.match(/<script>([\s\S]*?)<\/script>/)[1], {
     location: {
@@ -172,8 +204,10 @@ try {
       },
     },
   });
-  assert.equal(redirected, `${base}?__photoshow_route=${encodeURIComponent(directPath)}`);
+  assert.equal(redirected, `${base}?__crossgrain_route=${encodeURIComponent(directPath)}`);
   nextFont.release();
+  await until(() => app.hasAttribute('fonts-ready'));
+  assert.equal(app.inert, false);
   if (!direct) {
     await until(() => window.document.querySelector('form'));
     assert.equal(fontFaces.length, 1);
@@ -182,7 +216,7 @@ try {
     window.document.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
     assert.equal(window.location.pathname, `${base}${did}`);
   }
-  await until(() => fontFaces.length === 2 && requests.length === 3);
+  await until(() => fontFaces.length === 2 && requests.length === 4);
   assert.equal(window.document.querySelector('photo-card'), null);
   const monoFont = fontFaces[1];
   assert.equal(monoFont.family, 'Atkinson Hyperlegible Mono');
@@ -194,12 +228,24 @@ try {
   assert.equal(readFileSync(resolve('dist', monoPath)).subarray(0, 4).toString(), 'wOF2');
   monoFont.release();
   await until(() => window.document.querySelector('photo-card'));
+  assert.equal(app.querySelector('h1 a'), null, 'A slow optional profile must not delay photos');
+  const icon = window.document.querySelector('link[rel="icon"]');
+  assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
+  releaseProfile();
+  await until(() => app.querySelector('h1 a') && avatars.length === 1);
+  assert.equal(app.querySelector('h1 a').href, `https://bsky.app/profile/${did}`);
+  assert.equal(avatars[0].src, avatar);
+  assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
+  avatars[0].dispatchEvent(new Event('load'));
+  await until(() => icon.href === avatar);
+  assert.equal(icon.type, 'image/jpeg');
   assert.deepEqual(addedFonts, [nextFont, monoFont]);
   assert(window.document.querySelector('.photo-metadata').textContent.includes('FUJIFILM X-T5'));
   assert.equal(
     window.document.querySelector('h1')?.textContent,
     'photographer.example’s photography',
   );
+  assert.equal(window.document.title, 'photographer.example’s photography — crossgrain');
   assert.equal(window.document.querySelectorAll('.gallery-group-title').length, 1);
   assert.equal(
     window.document.querySelector('.gallery-group-heading time').dateTime,
@@ -213,7 +259,11 @@ try {
   if (sharedPhoto) {
     assert(!requests.some((url) => url.pathname.endsWith('/com.atproto.repo.listRecords')));
     assert.equal(
-      requests.filter((url) => url.pathname.endsWith('/com.atproto.repo.getRecord')).length,
+      requests.filter(
+        (url) =>
+          url.searchParams.get('collection') === 'social.grain.gallery' &&
+          url.pathname.endsWith('/com.atproto.repo.getRecord'),
+      ).length,
       1,
     );
   }
@@ -229,7 +279,7 @@ try {
   white.dispatchEvent(new Event('change', { bubbles: true }));
   await window.document.querySelector('photo-lightbox').updateComplete;
   assert.equal(dialog.querySelector('.lightbox-image').dataset.background, 'white');
-  assert.equal(window.localStorage.getItem('photoshow.lightbox.background'), 'white');
+  assert.equal(window.localStorage.getItem('crossgrain.lightbox.background'), 'white');
   assert.equal(dialog.querySelector('img'), image);
   const viewer = window.document.querySelector('photo-lightbox');
   const firstGroup = window.document.querySelector('photo-group');
@@ -266,9 +316,25 @@ try {
   assert.equal(dialog.querySelector('input[value="white"]').checked, true);
   dialog.querySelector('.lightbox-close').click();
   await until(() => !window.location.hash);
-  assert.equal(requests.length, sharedPhoto ? 6 : 3);
+  assert.equal(requests.length, sharedPhoto ? 8 : 4);
+  const credit = app.querySelector('.gallery-credit');
+  assert.equal(
+    app.querySelector('.gallery-heading .gallery-copyright').textContent.trim(),
+    `© ${new Date().getFullYear()}`,
+  );
+  const homeLink = credit.querySelector('a');
+  assert.equal(homeLink.getAttribute('href'), base);
+  homeLink.click();
+  await until(() => app.querySelector('form'));
+  assert.equal(window.location.pathname, base);
+  const homeCredit = app.querySelector('footer');
+  assert(homeCredit.textContent.includes(`© ${new Date().getFullYear()} geesawra`));
+  assert.equal(homeCredit.querySelector('a').href, 'https://github.com/geesawra/crossgrain');
+  assert.equal(window.document.title, 'crossgrain');
+  assert.equal(icon.getAttribute('href'), `${base}favicon.svg`);
+  assert.equal(icon.type, 'image/svg+xml');
   console.log(
-    `Production ${sharedPhoto ? 'photo link' : direct ? 'direct link' : 'home'} verified at ${base}: font readiness, deferred Mono, licenses, Pages redirect, DID loading, photography title, grouped photos, lazy lightbox, original image, saved background, details, shared URLs, and Back/Forward. No browser launched.`,
+    `Production ${sharedPhoto ? 'photo link' : direct ? 'direct link' : 'home'} verified at ${base}: concurrent fonts and data, progressive gallery, optional profile link, avatar favicon and fallback, licenses, Pages redirect, lightbox controls, shared URLs, and Back/Forward. No browser launched.`,
   );
 } finally {
   window.document.body.replaceChildren();

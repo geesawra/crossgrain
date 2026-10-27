@@ -1,8 +1,8 @@
-# Photoshow
+# crossgrain
 
 A personal photo gallery for [Grain](https://grain.social). Enter a handle or DID to see that account’s public photos. Photos keep their shape and stack into columns that fit your screen. Click a photo to open a lightbox with captions, camera settings, and a link to the Grain post.
 
-Photoshow runs entirely in your browser. It uses [Lit](https://lit.dev/) Web Components, TypeScript, and Vite. It needs no backend, sign-in, API key, or database. Lit is the only runtime dependency.
+crossgrain runs entirely in your browser. It uses [Lit](https://lit.dev/) Web Components, TypeScript, and Vite. It needs no backend, sign-in, API key, or database. Lit is the only runtime dependency.
 
 ## Run locally
 
@@ -19,7 +19,7 @@ Open the URL printed by Vite. Enter your handle or DID, or open a gallery direct
 http://localhost:5173/did:plc:your-account-did
 ```
 
-The home page shows only the input and an Open button. It does not load anyone’s photos until you choose an account. Both `did:plc` and `did:web` work. When you enter a handle, the app checks that it belongs to the account and changes the gallery URL to use its DID.
+The home page has the input and an Open button, with a small copyright notice for geesawra and a [GitHub link](https://github.com/geesawra/crossgrain) at the bottom. It does not load anyone’s photos until you choose an account. Both `did:plc` and `did:web` work. When you enter a handle, the app checks that it belongs to the account and changes the gallery URL to use its DID.
 
 ## Build and host
 
@@ -34,23 +34,27 @@ The build goes into `dist/`. JavaScript, CSS, HTML, Lit templates, and the build
 
 In your repository’s **Settings → Pages**, choose **GitHub Actions** as the source. Push to `main` or run the Pages workflow manually. The workflow installs dependencies, runs all checks, and deploys `dist/`. Pull requests run the checks without deploying.
 
-The workflow reads the site path from GitHub Pages. Account sites, custom domains, and project paths such as `https://you.github.io/photoshow/` all use the right asset and gallery URLs.
+The workflow reads the site path from GitHub Pages. Account sites, custom domains, and project paths such as `https://you.github.io/crossgrain/` all use the right asset and gallery URLs.
 
 GitHub Pages serves `404.html` for direct gallery links. That page redirects to the app, which restores the original gallery URL before showing any text. This also works when you refresh a gallery. The site includes `.nojekyll` so Pages serves the built files as they are.
 
 To check a project-path build locally:
 
 ```sh
-PAGES_BASE_PATH=/photoshow/ npm run build
-PAGES_BASE_PATH=/photoshow/ npm run test:build
+PAGES_BASE_PATH=/crossgrain/ npm run build
+PAGES_BASE_PATH=/crossgrain/ npm run test:build
 npm run preview -- --port 4173
 ```
 
-Open `http://localhost:4173/photoshow/`. Run `npm run build` again to return to a build at `/`.
+Open `http://localhost:4173/crossgrain/`. Run `npm run build` again to return to a build at `/`.
 
 ## The gallery
 
-Each portfolio starts with “{handle}’s photography.” Each Grain gallery has one title and description above its photos. Photos stack into columns within each gallery, and the galleries stack into columns too. The page background and text follow your device’s light or dark setting.
+Each portfolio starts with “{handle}’s photography.” If the account has a Bluesky profile, the handle is underlined and links to it. Its Bluesky avatar becomes the tab icon once the image is ready. If there is no avatar, or the image fails to load, the tab keeps the crossgrain icon. Returning home restores that icon too.
+
+The larger portfolio heading has a small “© {year}” beside it, with the year updated automatically. The copyright wraps below the title when space is tight. “Want your own?” sits on a separate line and returns to the home page. The credit appears when the portfolio opens, even as more galleries load below.
+
+Each Grain gallery has one title and description above its photos. Photos stack into columns within each gallery, and the galleries stack into columns too. The page background and text follow your device’s light or dark setting.
 
 The capture date appears beside each gallery name. Galleries with photos from different days show a date range. Missing or invalid capture dates are left out. Photo captions show the photo’s own text and available camera settings (EXIF). Post dates help sort photos but are not shown. Photos marked as sensitive need a tap before they appear.
 
@@ -82,7 +86,7 @@ A shared link loads only its named gallery first, so an older photo can open wit
 
 ## Fonts
 
-Photoshow uses two fonts from the [Atkinson Hyperlegible family](https://www.brailleinstitute.org/freefont/). The links below point to the original font projects and the license files included with the site.
+crossgrain uses two fonts from the [Atkinson Hyperlegible family](https://www.brailleinstitute.org/freefont/). The links below point to the original font projects and the license files included with the site.
 
 | Font                                                                                                                                                      | Used for                                                           | File size | License                                                                      |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------: | ---------------------------------------------------------------------------- |
@@ -91,7 +95,7 @@ Photoshow uses two fonts from the [Atkinson Hyperlegible family](https://www.bra
 
 In the lightbox, labels such as Camera and Lens use Next. Their values use Mono.
 
-The site hosts both WOFF2 files and makes no requests to a separate font service. Next starts loading with the page. Mono loads only when you open a gallery, while the account data loads. Text waits until its font is ready, so there is no visible font change or layout jump. If a font fails or takes more than three seconds, that text uses a system font for the rest of the visit. It will not switch fonts later.
+The site hosts both WOFF2 files and makes no requests to a separate font service. Next starts loading with the page. Mono loads only when you open a gallery. Fonts and account data load at the same time. Text waits until its font is ready, so there is no visible font change or layout jump. If a font fails or takes more than three seconds, that text uses a system font for the rest of the visit. It will not switch fonts later.
 
 Both font files are unchanged. Each font’s original copyright notice (2020–2024) is included with its license.
 
@@ -99,17 +103,21 @@ Both font files are unchanged. Each font’s original copyright notice (2020–2
 
 The browser finds the account’s data server from its DID document. It reads `social.grain.gallery` records in pages of three using `com.atproto.repo.listRecords`. Grain’s public `social.grain.unspecced.getGallery` API supplies the photos and camera details for those galleries. The app does not download the account’s entire photo or EXIF history.
 
+The page starts without a loading banner. The heading appears once the account is known, and each gallery fades in as its metadata arrives. One slow gallery does not hold up the others. Reduced-motion settings turn off the fades.
+
+A separate request checks the same account’s `app.bsky.actor.profile/self` record on its data server. That one record supplies both the heading link and the avatar, which loads through Bluesky’s CDN. This optional lookup never delays the photos. A missing or unavailable profile leaves the heading plain and the crossgrain icon in place.
+
 Photo links use `com.atproto.repo.getRecord` to fetch the named gallery record directly, followed by Grain’s gallery API. Both requests use the account from the URL. Full portfolios and directly opened galleries have separate five-minute caches.
 
 The next page loads near the bottom of the gallery, or when you move past the last loaded photo in the lightbox. Failed requests keep the photos already shown and let you retry. The app skips duplicates and checks for repeated pages. It relies on Grain’s public API and the account’s data server being available. The data server must allow requests from other websites (CORS).
 
 Only public, published galleries are shown. Drafts, unattached uploads, private galleries, and private group spaces are not included. Grain stores EXIF numbers at a scale of 1,000,000, including ISO; the app converts them for display.
 
-Photo data stays in memory for five minutes so return visits are faster. Only the lightbox background choice is saved between visits, under `photoshow.lightbox.background` in browser storage. There are no analytics, demo accounts, or suggested accounts.
+Photo data stays in memory for five minutes so return visits are faster. Only the lightbox background choice is saved between visits, under `crossgrain.lightbox.background` in browser storage. Choices saved before the rename still work. There are no analytics, demo accounts, or suggested accounts.
 
 ## Code and size
 
-The custom elements share CSS and use the normal page DOM. Lit handles templates and reactive updates for the app, gallery, groups, cards, and lightbox. Small native elements handle masonry layout and image loading. `photo-show` handles the form and browser history. `photo-gallery` loads the data. `photo-lightbox` uses the browser’s modal dialog, with keyboard controls and focus restored on close.
+The custom elements share CSS and use the normal page DOM. Lit handles templates and reactive updates for the app, gallery, groups, cards, and lightbox. Small native elements handle masonry layout and image loading. `crossgrain-app` handles the form and browser history. `photo-gallery` loads the data. `photo-lightbox` uses the browser’s modal dialog, with keyboard controls and focus restored on close.
 
 Lit templates run directly in JavaScript and need no template compiler. Vite bundles and minifies the production build; TypeScript checks the source.
 
@@ -119,11 +127,11 @@ Current JavaScript sizes:
 
 | JavaScript                      | Uncompressed |     gzip |   Brotli |
 | ------------------------------- | -----------: | -------: | -------: |
-| Home                            |     22.29 KB |  8.65 KB |  7.73 KB |
-| Gallery, before opening a photo |     46.03 KB | 17.29 KB | 15.46 KB |
-| Including the lightbox          |     52.68 KB | 19.87 KB | 17.66 KB |
+| Home                            |     23.03 KB |  8.99 KB |  8.05 KB |
+| Gallery, before opening a photo |     49.08 KB | 18.29 KB | 16.34 KB |
+| Including the lightbox          |     55.79 KB | 20.88 KB | 18.56 KB |
 
-Fonts and CSS are separate from these figures. Actual download sizes depend on the host’s compression settings. Run `npm run size` to update the report. The build fails if the gallery JavaScript exceeds 18 KB with gzip, or all JavaScript exceeds 20 KB with gzip.
+Fonts and CSS are separate from these figures. Actual download sizes depend on the host’s compression settings. Run `npm run size` to update the report. The build fails if the gallery JavaScript exceeds 18.5 KB with gzip, or all JavaScript exceeds 21 KB with gzip. These limits include the profile lookup, avatar icon, and progressive loading.
 
 ## Checks
 
@@ -133,10 +141,10 @@ npm run check
 
 This runs ESLint, including Lit’s recommended rules; Stylelint; Prettier; tests; TypeScript; the production build; size limits; and production checks. Use `npm run format` to format the source, or `npm run lint` to run just the linters and format check. The GitHub Pages workflow also passes `actionlint`.
 
-Tests cover account lookup, page loading, layout, image loading, lightbox controls, swipe and tap gestures, saved choices, font loading, Pages routes, shared photo links, and Back/Forward navigation. They also check failures, retries, and cancelling requests. Happy DOM runs the checks without opening a browser.
+Tests cover account lookup, progressive page loading, profile links, avatar icons and fallbacks, layout, image loading, lightbox controls, swipe and tap gestures, saved choices, font loading, Pages routes, shared photo links, and Back/Forward navigation. They also check failures, retries, and cancelling requests. Happy DOM runs the checks without opening a browser.
 
-The production checks run the built JavaScript with sample account data from the home page, a direct portfolio link, and a shared photo link. They check font readiness, deferred Mono loading, included licenses, the Pages redirect, lightbox behavior, and browser history.
+The production checks run the built JavaScript with sample account data from the home page, a direct portfolio link, and a shared photo link. They check concurrent font and data loading, profile links, avatar icons, included licenses, the Pages redirect, lightbox behavior, and browser history.
 
 ## License
 
-Photoshow’s code uses the [MIT License](LICENSE). [Lit](https://github.com/lit/lit) uses the [BSD 3-Clause License](public/licenses/lit-BSD-3-Clause.txt). The fonts keep their separate SIL Open Font License 1.1 licenses: [Next](public/fonts/OFL.txt) and [Mono](public/fonts/atkinson-hyperlegible-mono/OFL.txt).
+crossgrain’s code uses the [MIT License](LICENSE). [Lit](https://github.com/lit/lit) uses the [BSD 3-Clause License](public/licenses/lit-BSD-3-Clause.txt). The fonts keep their separate SIL Open Font License 1.1 licenses: [Next](public/fonts/OFL.txt) and [Mono](public/fonts/atkinson-hyperlegible-mono/OFL.txt).

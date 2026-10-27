@@ -1,8 +1,13 @@
 export class PhotoMasonry extends HTMLElement {
+  static observedAttributes = ['pending'];
   #observer?: ResizeObserver;
   #childrenObserver?: MutationObserver;
   #items = new Set<Element>();
   #frame = 0;
+
+  attributeChangedCallback() {
+    this.#schedule();
+  }
 
   connectedCallback() {
     this.classList.add('masonry');
@@ -46,7 +51,7 @@ export class PhotoMasonry extends HTMLElement {
     if (!this.isConnected || !width) return;
     const galleries = this.getAttribute('variant') === 'galleries';
     const columns = galleries
-      ? width < 1000 || this.children.length === 1
+      ? width < 1000 || (this.children.length === 1 && !this.hasAttribute('pending'))
         ? 1
         : 2
       : width < 440

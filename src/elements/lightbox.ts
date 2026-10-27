@@ -14,7 +14,7 @@ export interface LightboxState {
   error: string;
 }
 let detailsSequence = 0;
-const backgroundKey = 'photoshow.lightbox.background';
+const backgroundKey = 'crossgrain.lightbox.background';
 type Background = 'gray' | 'white';
 let preferredBackground: Background = 'gray';
 
@@ -68,7 +68,9 @@ export class PhotoLightbox extends PhotoElement {
       this.showDetails = true;
       this.opened = true;
       try {
-        const saved = window.localStorage.getItem(backgroundKey);
+        const saved =
+          window.localStorage.getItem(backgroundKey) ??
+          window.localStorage.getItem('photoshow.lightbox.background');
         if (saved === 'gray' || saved === 'white') preferredBackground = saved;
       } catch {
         /* Use the session choice. */

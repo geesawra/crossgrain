@@ -4,13 +4,13 @@ import { Window } from 'happy-dom';
 import { actorFromPath, galleryPath, restorePageRoute } from './routes.ts';
 import { photoFromHash, photoPath } from './photo-route.ts';
 
-const window = new Window({ url: 'https://photographer.github.io/photoshow/' });
+const window = new Window({ url: 'https://photographer.github.io/crossgrain/' });
 Object.defineProperty(globalThis, 'window', { configurable: true, value: window });
 after(() => window.happyDOM.close());
 
 describe('static site routes', () => {
   it('round-trips DIDs and handles at root and project URLs', () => {
-    for (const base of ['/', '/photoshow/', '/photoshow']) {
+    for (const base of ['/', '/crossgrain/', '/crossgrain']) {
       for (const actor of [
         'did:plc:aaaaaaaaaaaaaaaaaaaaaaaa',
         'did:web:photos.example%3A8443:users:alice',
@@ -22,18 +22,18 @@ describe('static site routes', () => {
       }
       assert.equal(actorFromPath(galleryPath('', base), base), '');
     }
-    assert.equal(actorFromPath('/elsewhere/photographer.example', '/photoshow/'), '');
-    assert.equal(actorFromPath('/photoshowish/photographer.example', '/photoshow/'), '');
+    assert.equal(actorFromPath('/elsewhere/photographer.example', '/crossgrain/'), '');
+    assert.equal(actorFromPath('/crossgrainish/photographer.example', '/crossgrain/'), '');
   });
 
   it('restores direct gallery links without losing encoded DIDs, queries, or fragments', () => {
-    for (const base of ['/', '/photoshow/', '/photoshow']) {
+    for (const base of ['/', '/crossgrain/', '/crossgrain']) {
       const root = base.endsWith('/') ? base : `${base}/`;
       const target = `${galleryPath('did:web:photos.example%3A8443:alice', base)}?view=all#gallery=gallery1&photo=photo2`;
       window.history.replaceState(
         {},
         '',
-        `${root}?__photoshow_route=${encodeURIComponent(target)}`,
+        `${root}?__crossgrain_route=${encodeURIComponent(target)}`,
       );
       restorePageRoute(base);
       assert.equal(
@@ -52,22 +52,23 @@ describe('static site routes', () => {
       'https://elsewhere.example/photo',
       '//elsewhere.example/photo',
       '/elsewhere/photo',
-      '/photoshowish/photo',
-      '/photoshow/../photo',
+      '/crossgrainish/photo',
+      '/crossgrain/../photo',
       'http://[invalid',
     ]) {
-      const path = `/photoshow/?__photoshow_route=${encodeURIComponent(target)}`;
+      const path = `/crossgrain/?__crossgrain_route=${encodeURIComponent(target)}`;
       window.history.replaceState({}, '', path);
-      restorePageRoute('/photoshow/');
+      restorePageRoute('/crossgrain/');
       assert.equal(window.location.pathname + window.location.search, path);
     }
-    const path = '/photoshow/photographer.example?__photoshow_route=%2Fphotoshow%2Fother.example';
+    const path =
+      '/crossgrain/photographer.example?__crossgrain_route=%2Fcrossgrain%2Fother.example';
     window.history.replaceState({}, '', path);
-    restorePageRoute('/photoshow/');
+    restorePageRoute('/crossgrain/');
     assert.equal(window.location.pathname + window.location.search, path);
-    window.history.replaceState({}, '', '/photoshow/');
-    restorePageRoute('/photoshow/');
-    assert.equal(window.location.pathname, '/photoshow/');
+    window.history.replaceState({}, '', '/crossgrain/');
+    restorePageRoute('/crossgrain/');
+    assert.equal(window.location.pathname, '/crossgrain/');
   });
 });
 

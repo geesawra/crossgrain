@@ -44,6 +44,6 @@ const row = (value) => ({
 });
 console.table({ Home: row(home), Gallery: row(gallery), 'Including lightbox': row(complete) });
 
-// Keep future changes within the agreed client size budget.
-if (gallery.gzip > 18_000 || complete.gzip > 20_000)
+// Keep room for the optional profile and progressive loading without unbounded growth.
+if (gallery.gzip > 18_500 || complete.gzip > 21_000)
   throw new Error('The client JavaScript exceeded its size budget.');

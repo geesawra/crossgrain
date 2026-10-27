@@ -1,7 +1,7 @@
 import { GalleryError } from './errors.ts';
 import { normalizeActor, didDocumentUrl } from './actor.ts';
 import { getJson } from './request.ts';
-import type { Identity } from './grain.ts';
+import type { BlobRef, Identity } from './grain.ts';
 
 interface DidDocument {
   id: string;
@@ -48,4 +48,29 @@ export async function resolveIdentity(input: string, signal: AbortSignal): Promi
   }
   const handle = document.alsoKnownAs?.find((alias) => alias.startsWith('at://'))?.slice(5) || did;
   return { did, pds: pds.href.replace(/\/$/, ''), handle };
+}
+
+export async function loadBlueskyProfile(identity: Identity, signal: AbortSignal) {
+  if (identity.bluesky !== undefined) return identity.bluesky;
+  try {
+    const record = await getJson<{ uri: string; value?: { $type?: string; avatar?: BlobRef } }>(
+      `${identity.pds}/xrpc/com.atproto.repo.getRecord?${new URLSearchParams({ repo: identity.did, collection: 'app.bsky.actor.profile', rkey: 'self' })}`,
+      signal,
+    );
+    let profile: Identity['bluesky'] = null;
+    if (
+      record.uri === `at://${identity.did}/app.bsky.actor.profile/self` &&
+      record.value?.$type === 'app.bsky.actor.profile'
+    ) {
+      const cid = record.value.avatar?.ref?.$link || record.value.avatar?.cid;
+      profile = {};
+      if (typeof cid === 'string' && /^b[a-z2-7]+$/.test(cid))
+        profile.avatar = `https://cdn.bsky.app/img/avatar_thumbnail/plain/${encodeURIComponent(identity.did).replace(/%3A/gi, ':')}/${cid}@jpeg`;
+    }
+    if (!signal.aborted) identity.bluesky = profile;
+    return profile;
+  } catch {
+    if (!signal.aborted) identity.bluesky = null;
+    return null;
+  }
 }

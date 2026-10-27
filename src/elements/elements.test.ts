@@ -153,8 +153,14 @@ function repository() {
     holdLinked: false,
     failLinked: false,
     missingLinked: false,
+    profile: false,
+    holdProfile: false,
+    batched: false,
+    holdGallery: false,
+    failGallery: false,
   };
   let release: (() => void) | undefined;
+  let releaseProfile: (() => void) | undefined;
   const photoUri = (n: number) => `at://${did}/social.grain.photo/photo${n}`;
   const galleryUri = (n: number) => `at://${did}/social.grain.gallery/gallery${n}`;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -175,6 +181,19 @@ function repository() {
         ],
       });
     if (url.hostname === 'photos.example') {
+      if (url.searchParams.get('collection') === 'app.bsky.actor.profile') {
+        if (options.holdProfile)
+          await new Promise<void>((resolve) => {
+            releaseProfile = resolve;
+          });
+        if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        return options.profile
+          ? json({
+              uri: `at://${did}/app.bsky.actor.profile/self`,
+              value: { $type: 'app.bsky.actor.profile' },
+            })
+          : json({ error: 'RecordNotFound' }, 400);
+      }
       if (url.pathname.endsWith('/com.atproto.repo.getRecord')) {
         if (options.holdLinked)
           await new Promise<void>((resolve) => {
@@ -201,21 +220,25 @@ function repository() {
       if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
       if (next && options.failNext) return json({}, 503);
       return json({
-        records: [
-          {
-            uri: galleryUri(next ? 2 : 1),
-            value: {
-              title: `Gallery ${next ? 2 : 1}`,
-              description: 'Shared description',
-              createdAt: next ? '2026-09-01T00:00:00Z' : '2026-10-01T00:00:00Z',
-            },
+        records: (options.batched ? [1, 2] : [next ? 2 : 1]).map((number) => ({
+          uri: galleryUri(number),
+          value: {
+            title: `Gallery ${number}`,
+            description: 'Shared description',
+            createdAt: next ? '2026-09-01T00:00:00Z' : '2026-10-01T00:00:00Z',
           },
-        ],
+        })),
         ...(!next ? { cursor: 'next' } : {}),
       });
     }
     assert.equal(url.hostname, 'grain.social');
     const next = url.searchParams.get('gallery') === galleryUri(2);
+    if (next && options.holdGallery)
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    if (init?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    if (next && options.failGallery) return json({}, 503);
     return json({
       gallery: {
         uri: galleryUri(next ? 2 : 1),
@@ -238,7 +261,14 @@ function repository() {
       },
     });
   }) as typeof fetch;
-  return { did, handle, requests, options, release: () => release?.() };
+  return {
+    did,
+    handle,
+    requests,
+    options,
+    release: () => release?.(),
+    releaseProfile: () => releaseProfile?.(),
+  };
 }
 
 const photo: Photo = {
@@ -271,7 +301,7 @@ beforeEach(() => {
   dom.history.replaceState({}, '', '/');
   dom.document.body.style.overflow = '';
   dom.localStorage.clear();
-  dom.localStorage.setItem('photoshow.lightbox.background', 'gray');
+  dom.localStorage.setItem('crossgrain.lightbox.background', 'gray');
   globalThis.fetch = (async () => {
     throw new Error('Unexpected account request');
   }) as typeof fetch;
@@ -290,18 +320,108 @@ after(async () => {
 });
 
 describe('Lit app and paged galleries', () => {
-  it('renders just the handle form on home and never requests a default account', async () => {
+  it('does not wait for a Bluesky profile before displaying photos, then links only the handle', async () => {
+    const api = repository();
+    api.options.profile = api.options.holdProfile = true;
+    const gallery = dom.document.createElement('photo-gallery');
+    gallery.actor = api.did;
+    dom.document.body.append(gallery);
+    await until(() => gallery.querySelectorAll('photo-card').length === 2);
+    assert.equal(gallery.querySelector('h1 a'), null);
+    assert(!gallery.textContent?.includes('Loading'));
+    const firstCard = gallery.querySelector('photo-card');
+    api.releaseProfile();
+    await until(() => gallery.querySelector('h1 a'));
+    const link = gallery.querySelector<HTMLAnchorElement>('h1 a')!;
+    assert.equal(link.textContent, api.handle);
+    assert.equal(link.href, `https://bsky.app/profile/${api.did}`);
+    assert.equal(gallery.querySelector('h1')?.textContent, `${api.handle}’s photography`);
+    assert.equal(gallery.querySelector('photo-card'), firstCard);
+    assert.equal(
+      api.requests.filter(
+        ({ url }) => url.searchParams.get('collection') === 'app.bsky.actor.profile',
+      ).length,
+      1,
+    );
+  });
+  it('keeps the heading plain when the account has no Bluesky profile', async () => {
+    const api = repository();
+    const gallery = dom.document.createElement('photo-gallery');
+    gallery.actor = api.did;
+    dom.document.body.append(gallery);
+    await until(() => gallery.querySelector('photo-card'));
+    assert.equal(gallery.querySelector('h1 a'), null);
+    assert.equal(gallery.querySelector('[role="alert"]'), null);
+  });
+  it('reveals completed galleries while another is pending without replacing existing images', async () => {
+    const api = repository();
+    api.options.batched = api.options.holdGallery = true;
+    const gallery = dom.document.createElement('photo-gallery');
+    gallery.actor = api.did;
+    dom.document.body.append(gallery);
+    await until(() => gallery.querySelectorAll('photo-card').length === 2);
+    const image = gallery.querySelector('img');
+    assert.equal(gallery.querySelector('main')?.getAttribute('aria-busy'), 'true');
+    assert(!gallery.textContent?.includes('Loading'));
+    assert.equal(
+      [...IntersectionMock.instances].some((observer) => observer.targets.size),
+      false,
+    );
+    api.release();
+    await until(() => gallery.querySelectorAll('photo-card').length === 3);
+    assert.equal(gallery.querySelector('img'), image);
+    assert.equal(gallery.querySelectorAll('photo-group').length, 2);
+    assert.equal(gallery.querySelector('main')?.getAttribute('aria-busy'), 'false');
+  });
+  it('keeps completed galleries visible on an initial batch failure and lets the user retry', async () => {
+    const api = repository();
+    api.options.batched = api.options.holdGallery = api.options.failGallery = true;
+    const gallery = dom.document.createElement('photo-gallery');
+    gallery.actor = api.did;
+    dom.document.body.append(gallery);
+    await until(() => gallery.querySelectorAll('photo-card').length === 2);
+    const image = gallery.querySelector('img');
+    api.release();
+    await until(() => gallery.querySelector('.pagination-status [role="alert"]'));
+    assert.equal(gallery.querySelector('img'), image);
+    assert.equal(gallery.querySelectorAll('photo-card').length, 2);
+    api.options.holdGallery = api.options.failGallery = false;
+    gallery.querySelector<HTMLButtonElement>('.pagination-status button')!.click();
+    await until(() => gallery.querySelectorAll('photo-card').length === 3);
+    assert.equal(gallery.querySelector<HTMLElement>('.pagination-status')?.hidden, true);
+  });
+  it('does not cache a partially loaded initial batch as a complete portfolio', async () => {
+    const api = repository();
+    api.options.batched = api.options.holdGallery = true;
+    const gallery = dom.document.createElement('photo-gallery');
+    gallery.actor = api.did;
+    dom.document.body.append(gallery);
+    await until(() => gallery.querySelectorAll('photo-card').length === 2);
+    gallery.remove();
+    api.release();
+    api.options.holdGallery = false;
+    const returned = dom.document.createElement('photo-gallery');
+    returned.actor = api.did;
+    dom.document.body.append(returned);
+    await until(() => returned.querySelectorAll('photo-card').length === 3);
+    assert.equal(
+      api.requests.filter(({ url }) => url.pathname.endsWith('/com.atproto.repo.listRecords'))
+        .length,
+      2,
+    );
+  });
+  it('renders the minimal home page and credit without requesting a default account', async () => {
     let calls = 0;
     globalThis.fetch = (async () => {
       calls++;
       return json({});
     }) as typeof fetch;
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await tick();
     assert.equal(app.querySelectorAll('input').length, 1);
     assert.equal(app.querySelector('input')?.placeholder, 'your handle here');
-    assert.equal(app.querySelectorAll('img, h1, nav, footer, header').length, 0);
+    assert.equal(app.querySelectorAll('img, h1, nav, header').length, 0);
     assert.equal(calls, 0);
     app.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
     await tick();
@@ -310,7 +430,7 @@ describe('Lit app and paged galleries', () => {
   });
   it('opens a handle, canonicalizes the DID URL, and adds the photography title', async () => {
     const api = repository();
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await tick();
     app.querySelector('input')!.value = api.handle;
@@ -378,7 +498,7 @@ describe('Lit app and paged galleries', () => {
   });
   it('aborts requests and disconnects observers when navigating away', async () => {
     const api = repository();
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     app.navigate(api.did);
     await until(() => app.querySelector('photo-card'));
@@ -399,7 +519,7 @@ describe('Lit app and paged galleries', () => {
   });
   it('handles popstate without leaving the previous gallery mounted', async () => {
     const api = repository();
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     app.navigate(api.did);
     await until(() => app.querySelector('photo-card'));
@@ -415,14 +535,14 @@ describe('shareable lightboxes', () => {
     const api = repository();
     const url = `/${api.did}#gallery=gallery2&photo=photo3`;
     dom.history.replaceState({}, '', url);
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await until(() => app.querySelector('dialog')?.open);
     const gallery = app.querySelector('photo-gallery');
     const dialog = app.querySelector('dialog')!;
     assert.equal(dialog.querySelector('.lightbox-caption')?.textContent, 'Photo 3 caption');
     assert.equal(dom.location.pathname + dom.location.hash, url);
-    assert.equal(api.requests.length, 3);
+    assert.equal(api.requests.length, 4);
     assert(!api.requests.some(({ url }) => url.pathname.endsWith('/com.atproto.repo.listRecords')));
     assert.equal(api.requests.filter(({ url }) => url.hostname === 'grain.social').length, 1);
     assert.equal(app.querySelectorAll('photo-card').length, 1);
@@ -451,7 +571,7 @@ describe('shareable lightboxes', () => {
 
   it('updates the URL across swipes and metadata pages without adding a history entry per photo', async () => {
     const api = repository();
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     app.navigate(api.handle);
     await until(() => app.querySelectorAll('photo-card').length === 2);
@@ -490,7 +610,7 @@ describe('shareable lightboxes', () => {
   it('opens a fresh link to a non-first photo and updates its fragment when navigating backwards', async () => {
     const api = repository();
     dom.history.replaceState({}, '', `/${api.handle}#gallery=gallery1&photo=photo2`);
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await until(() => app.querySelector('dialog')?.open);
     const dialog = app.querySelector('dialog')!;
@@ -505,7 +625,7 @@ describe('shareable lightboxes', () => {
   it('rejects invalid photo fragments without fetching data and offers the portfolio', async () => {
     const api = repository();
     dom.history.replaceState({}, '', `/${api.did}#gallery=gallery1&photo=..`);
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await until(() => app.querySelector('.gallery-state [role="alert"]'));
     assert(app.querySelector('[role="alert"]')?.textContent?.includes('incomplete or invalid'));
@@ -523,7 +643,7 @@ describe('shareable lightboxes', () => {
     const api = repository();
     api.options.failLinked = true;
     dom.history.replaceState({}, '', `/${api.did}#gallery=gallery2&photo=photo3`);
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await until(() => app.querySelector('.gallery-state [role="alert"]'));
     assert(app.querySelector('[role="alert"]')?.textContent?.includes('503'));
@@ -555,15 +675,21 @@ describe('shareable lightboxes', () => {
     const api = repository();
     api.options.holdLinked = true;
     dom.history.replaceState({}, '', `/${api.did}#gallery=gallery2&photo=photo3`);
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await until(() =>
-      api.requests.some(({ url }) => url.pathname.endsWith('/com.atproto.repo.getRecord')),
+      api.requests.some(
+        ({ url }) =>
+          url.pathname.endsWith('/com.atproto.repo.getRecord') &&
+          url.searchParams.get('collection') === 'social.grain.gallery',
+      ),
     );
     app.navigate('');
     await tick();
-    const request = api.requests.find(({ url }) =>
-      url.pathname.endsWith('/com.atproto.repo.getRecord'),
+    const request = api.requests.find(
+      ({ url }) =>
+        url.pathname.endsWith('/com.atproto.repo.getRecord') &&
+        url.searchParams.get('collection') === 'social.grain.gallery',
     )!;
     assert.equal(request.signal?.aborted, true);
     api.release();
@@ -574,7 +700,7 @@ describe('shareable lightboxes', () => {
   });
   it('keeps the resolved account mounted when going Back during a linked-gallery request', async () => {
     const api = repository();
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     app.navigate(api.handle);
     await until(() => app.querySelectorAll('photo-card').length === 2);
@@ -583,10 +709,16 @@ describe('shareable lightboxes', () => {
     dom.history.pushState({}, '', `/${api.did}#gallery=gallery2&photo=photo3`);
     dom.dispatchEvent(new Event('hashchange'));
     await until(() =>
-      api.requests.some(({ url }) => url.pathname.endsWith('/com.atproto.repo.getRecord')),
+      api.requests.some(
+        ({ url }) =>
+          url.pathname.endsWith('/com.atproto.repo.getRecord') &&
+          url.searchParams.get('collection') === 'social.grain.gallery',
+      ),
     );
-    const request = api.requests.find(({ url }) =>
-      url.pathname.endsWith('/com.atproto.repo.getRecord'),
+    const request = api.requests.find(
+      ({ url }) =>
+        url.pathname.endsWith('/com.atproto.repo.getRecord') &&
+        url.searchParams.get('collection') === 'social.grain.gallery',
     )!;
     dom.history.back();
     await until(() => !dom.location.hash && app.querySelectorAll('photo-card').length === 2);
@@ -597,22 +729,23 @@ describe('shareable lightboxes', () => {
     assert(!app.querySelector('dialog')?.open);
     assert.equal(dom.location.hash, '');
   });
-  it('reopens the selected photo after remounting without adding another lightbox history entry', async () => {
+  it('preserves a lightbox history entry from before the rename when reopening and closing', async () => {
     const api = repository();
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     app.navigate(api.did);
     await until(() => app.querySelectorAll('photo-card').length === 2);
     app.querySelectorAll<HTMLButtonElement>('.photo-open')[1].click();
     await until(() => app.querySelector('dialog')?.open);
     const historyLength = dom.history.length;
+    dom.history.replaceState({ photoshowLightbox: true }, '');
     app.remove();
-    const restored = dom.document.createElement('photo-show');
+    const restored = dom.document.createElement('crossgrain-app');
     dom.document.body.append(restored);
     await until(() => restored.querySelector('dialog')?.open);
     assert.equal(restored.querySelector('.lightbox-caption')?.textContent, 'Photo 2 caption');
     assert.equal(dom.history.length, historyLength);
-    dom.history.back();
+    restored.querySelector<HTMLButtonElement>('.lightbox-close')!.click();
     await until(() => !restored.querySelector('dialog')?.open);
     assert.equal(dom.location.hash, '');
     assert.equal(restored.querySelectorAll('photo-card').length, 2);
@@ -620,7 +753,7 @@ describe('shareable lightboxes', () => {
   it('follows another shared link and ignores its response if the selection changes again', async () => {
     const api = repository();
     dom.history.replaceState({}, '', `/${api.did}#gallery=gallery1&photo=photo1`);
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await until(() => app.querySelector('dialog')?.open);
     api.options.holdLinked = true;
@@ -630,6 +763,7 @@ describe('shareable lightboxes', () => {
       api.requests.some(
         ({ url }) =>
           url.pathname.endsWith('/com.atproto.repo.getRecord') &&
+          url.searchParams.get('collection') === 'social.grain.gallery' &&
           url.searchParams.get('rkey') === 'gallery2',
       ),
     );
@@ -793,7 +927,7 @@ describe('lightbox and captions', async () => {
     white.dispatchEvent(new Event('change', { bubbles: true }));
     await tick();
     assert.equal(viewer.querySelector<HTMLElement>('.lightbox-image')?.dataset.background, 'white');
-    assert.equal(dom.localStorage.getItem('photoshow.lightbox.background'), 'white');
+    assert.equal(dom.localStorage.getItem('crossgrain.lightbox.background'), 'white');
     assert.equal(viewer.querySelector('img'), image);
     viewer.querySelector<HTMLButtonElement>('.lightbox-details-toggle')!.click();
     viewer.present(state({ ...photo, id: 'photo2' }));
@@ -811,19 +945,37 @@ describe('lightbox and captions', async () => {
       'white',
     );
   });
+  it('keeps the background saved before the rename and saves changes under crossgrain', async () => {
+    dom.localStorage.removeItem('crossgrain.lightbox.background');
+    dom.localStorage.setItem('photoshow.lightbox.background', 'white');
+    const viewer = dom.document.createElement('photo-lightbox');
+    dom.document.body.append(viewer);
+    viewer.present(state());
+    await tick();
+    assert.equal(viewer.querySelector<HTMLInputElement>('input[value="white"]')?.checked, true);
+    const gray = viewer.querySelector<HTMLInputElement>('input[value="gray"]')!;
+    gray.checked = true;
+    gray.dispatchEvent(new Event('change', { bubbles: true }));
+    await tick();
+    assert.equal(dom.localStorage.getItem('crossgrain.lightbox.background'), 'gray');
+    viewer.dismiss();
+    viewer.present(state());
+    await tick();
+    assert.equal(viewer.querySelector<HTMLInputElement>('input[value="gray"]')?.checked, true);
+  });
   it('ignores invalid stored backgrounds and rereads the saved preference when reopening', async () => {
     const viewer = dom.document.createElement('photo-lightbox');
     dom.document.body.append(viewer);
     viewer.present(state());
     await tick();
     viewer.dismiss();
-    dom.localStorage.setItem('photoshow.lightbox.background', 'url(https://unexpected.example)');
+    dom.localStorage.setItem('crossgrain.lightbox.background', 'url(https://unexpected.example)');
     viewer.present(state());
     await tick();
     assert.equal(viewer.querySelector<HTMLElement>('.lightbox-image')?.dataset.background, 'gray');
     assert.equal(viewer.querySelectorAll('input:checked').length, 1);
     viewer.dismiss();
-    dom.localStorage.setItem('photoshow.lightbox.background', 'white');
+    dom.localStorage.setItem('crossgrain.lightbox.background', 'white');
     viewer.present(state());
     await tick();
     assert.equal(viewer.querySelector<HTMLInputElement>('input[value="white"]')?.checked, true);
@@ -908,7 +1060,7 @@ describe('lightbox and captions', async () => {
   });
   it('restores document scrolling when navigating away from an open lightbox', async () => {
     const api = repository();
-    const app = dom.document.createElement('photo-show');
+    const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     app.navigate(api.did);
     await until(() => app.querySelector('photo-card'));

@@ -32,7 +32,7 @@
   display: none !important;
 }
 
-photo-show,
+crossgrain-app,
 photo-gallery,
 photo-masonry,
 photo-group,
@@ -40,6 +40,17 @@ photo-card,
 photo-image,
 photo-lightbox {
   display: block;
+}
+
+crossgrain-app {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 350ms ease;
+}
+
+crossgrain-app[fonts-ready] {
+  opacity: 1;
+  visibility: visible;
 }
 
 photo-image {
@@ -80,11 +91,34 @@ button {
   outline-offset: 4px;
 }
 
-.home {
+.home-page {
   min-height: 100svh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
+.home {
   display: grid;
   place-items: center;
   padding: 24px;
+}
+
+.site-credit {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.site-credit a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.home-credit {
+  padding: 0 24px 24px;
+  text-align: center;
 }
 
 .handle-form {
@@ -144,12 +178,37 @@ button {
   padding: var(--gallery-padding);
 }
 
+.gallery-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 20px;
+  margin: 0 0 8px;
+  animation: gallery-in 450ms ease both;
+}
+
 .gallery-title {
-  margin: 0 0 40px;
-  font-size: clamp(20px, 2.2vw, 28px);
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 40px);
   font-weight: 400;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.gallery-title a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.gallery-credit {
+  margin-bottom: 40px;
+  animation: gallery-in 450ms ease both;
+}
+
+.gallery-copyright {
+  white-space: nowrap;
 }
 
 .masonry {
@@ -171,6 +230,17 @@ button {
 .gallery-group {
   border-top: 1px solid var(--line);
   padding-top: 14px;
+  animation: gallery-in 450ms ease both;
+}
+
+@keyframes gallery-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .gallery-group-caption {
@@ -714,6 +784,7 @@ figcaption {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  crossgrain-app,
   .photo-image,
   .lightbox-image,
   .lightbox-layout,
@@ -722,6 +793,12 @@ figcaption {
   }
 
   .image-spinner {
+    animation: none;
+  }
+
+  .gallery-heading,
+  .gallery-credit,
+  .gallery-group {
     animation: none;
   }
 }

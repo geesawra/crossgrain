@@ -13,6 +13,8 @@ import { photoFromHash, photoPath } from '../lib/photo-route.ts';
 import { errorMessage } from '../ui/dom.ts';
 import { PhotoElement } from '../ui/element.ts';
 import { loadTechnicalTypography } from '../ui/typography.ts';
+import { loadBlueskyProfile } from '../lib/identity.ts';
+import { setFavicon } from '../ui/favicon.ts';
 import './group.ts';
 import type { PhotoLightbox } from './lightbox.ts';
 
@@ -28,6 +30,8 @@ export class PhotoGallery extends PhotoElement {
     viewerError: { state: true },
     viewerReady: { state: true },
     activeId: { state: true },
+    initialLoading: { state: true },
+    profileUrl: { state: true },
   };
   declare actor: string;
   declare private current?: Portfolio;
@@ -37,6 +41,8 @@ export class PhotoGallery extends PhotoElement {
   declare private viewerError: string;
   declare private viewerReady: boolean;
   declare private activeId: string | null;
+  declare private initialLoading: boolean;
+  declare private profileUrl: string;
   #groups: PhotoGroup[] = [];
   #photos: Photo[] = [];
   #eagerIds = new Set<string>();
@@ -65,6 +71,8 @@ export class PhotoGallery extends PhotoElement {
     this.initialError = this.moreError = this.viewerError = '';
     this.loadingMore = this.viewerReady = false;
     this.activeId = null;
+    this.initialLoading = true;
+    this.profileUrl = '';
   }
   connectedCallback() {
     super.connectedCallback();
@@ -84,7 +92,8 @@ export class PhotoGallery extends PhotoElement {
   }
   protected updated(changed: PropertyValues) {
     if (changed.has('actor')) void this.#start();
-    if (changed.has('current') || changed.has('moreError')) this.#observeMore();
+    if (changed.has('current') || changed.has('moreError') || changed.has('initialLoading'))
+      this.#observeMore();
     this.#updateLightbox();
   }
   #home() {
@@ -110,8 +119,31 @@ export class PhotoGallery extends PhotoElement {
     this.#photos = [];
     this.#pending = undefined;
     this.loadingMore = false;
+    this.initialLoading = true;
+    this.profileUrl = '';
     this.initialError = this.moreError = this.viewerError = '';
     this.#routeHash = window.location.hash;
+    const typography = loadTechnicalTypography();
+    let checkingProfile = false;
+    const progress = (data: Portfolio) => {
+      if (controller.signal.aborted || !this.isConnected) return;
+      if (!checkingProfile) {
+        checkingProfile = true;
+        void loadBlueskyProfile(data.identity, controller.signal).then((profile) => {
+          if (!controller.signal.aborted && this.isConnected) {
+            this.profileUrl = profile
+              ? `https://bsky.app/profile/${encodeURIComponent(data.identity.did).replace(/%3A/gi, ':')}`
+              : '';
+            setFavicon(profile?.avatar);
+          }
+        });
+      }
+      if (!this.current) this.#commit({ ...data, photos: [] }, false);
+      void typography.then(() => {
+        if (!controller.signal.aborted && this.isConnected && data.photos.length)
+          this.#commit(data, false);
+      });
+    };
     try {
       const link = photoFromHash(this.#routeHash);
       this.#linkedGallery = link?.gallery || '';
@@ -129,31 +161,44 @@ export class PhotoGallery extends PhotoElement {
       const cached = !refresh && portfolioCache.get(this.#cacheKey(this.actor));
       const [data] = await Promise.all([
         cached && Date.now() - cached.time < 300_000
-          ? cached.data
-          : loadPortfolio(this.actor, controller.signal, this.#linkedGallery || undefined),
-        loadTechnicalTypography(),
+          ? Promise.resolve(cached.data).then((data) => {
+              progress(data);
+              return data;
+            })
+          : loadPortfolio(
+              this.actor,
+              controller.signal,
+              this.#linkedGallery || undefined,
+              progress,
+            ),
+        typography,
       ]);
       if (!controller.signal.aborted && this.isConnected) {
         this.#commit(data);
+        this.initialLoading = false;
         await this.#readPhotoRoute();
       }
     } catch (error) {
       if (controller.signal.aborted || !this.isConnected) return;
       controller.abort();
       this.initialError = errorMessage(error, 'Couldn’t load this gallery. Please try again.');
+    } finally {
+      if (this.#controller === controller) this.initialLoading = false;
     }
   }
 
-  #commit(data: Portfolio) {
+  #commit(data: Portfolio, complete = true) {
     this.#did = data.identity.did;
     this.#groups = groupPhotos(data.photos);
     this.#photos = this.#groups.flatMap((group) => group.photos);
     this.#eagerIds = new Set(this.#photos.slice(0, 4).map((photo) => photo.id));
     this.current = data;
-    const cached = { data, time: Date.now() };
-    portfolioCache.set(this.#cacheKey(this.actor), cached);
-    portfolioCache.set(this.#cacheKey(data.identity.did), cached);
-    document.title = `${data.identity.handle}’s photography — Photoshow`;
+    if (complete) {
+      const cached = { data, time: Date.now() };
+      portfolioCache.set(this.#cacheKey(this.actor), cached);
+      portfolioCache.set(this.#cacheKey(data.identity.did), cached);
+    }
+    document.title = `${data.identity.handle}’s photography — crossgrain`;
     const path = galleryPath(data.identity.did) + window.location.hash;
     if (window.location.pathname + window.location.search + window.location.hash !== path)
       window.history.replaceState(window.history.state, '', path);
@@ -161,7 +206,8 @@ export class PhotoGallery extends PhotoElement {
 
   #observeMore() {
     this.#observer?.disconnect();
-    if (!this.current?.cursor || this.moreError || !this.#sentinel.value) return;
+    if (this.initialLoading || !this.current?.cursor || this.moreError || !this.#sentinel.value)
+      return;
     this.#observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) void this.loadMore();
@@ -178,7 +224,10 @@ export class PhotoGallery extends PhotoElement {
     if (!data?.cursor || !signal || signal.aborted) return Promise.resolve(undefined);
     this.loadingMore = true;
     this.moreError = '';
-    const promise = loadPortfolioPage(data.identity, data.cursor, signal)
+    const promise = loadPortfolioPage(data.identity, data.cursor, signal, (photos) => {
+      if (!signal.aborted && this.isConnected)
+        this.#commit({ ...appendPortfolioPage(data, { photos }), cursor: data.cursor }, false);
+    })
       .then((page) => {
         if (signal.aborted || !this.isConnected) return undefined;
         const next = appendPortfolioPage(data, page);
@@ -213,6 +262,8 @@ export class PhotoGallery extends PhotoElement {
         );
         if (photo) {
           if (photo.id !== this.activeId) await this.#selectPhoto(photo);
+        } else if (this.initialLoading) {
+          await this.#start();
         } else if (
           this.#linkedGallery === link.gallery ||
           this.#photos.some((photo) => photo.galleryId === galleryId)
@@ -243,9 +294,9 @@ export class PhotoGallery extends PhotoElement {
   async #selectPhoto(photo: Photo) {
     const did = this.current!.identity.did;
     const path = photoPath(did, photo);
-    if (!window.history.state?.photoshowLightbox) {
+    if (!window.history.state?.crossgrainLightbox && !window.history.state?.photoshowLightbox) {
       window.history.replaceState(window.history.state, '', galleryPath(did));
-      window.history.pushState({ photoshowLightbox: true }, '', path);
+      window.history.pushState({ crossgrainLightbox: true }, '', path);
     } else window.history.replaceState(window.history.state, '', path);
     this.#routeHash = window.location.hash;
     this.activeId = photo.id;
@@ -291,26 +342,46 @@ export class PhotoGallery extends PhotoElement {
     this.activeId = null;
     this.#viewerVersion++;
     if (!selected || !this.isConnected) return;
-    if (window.history.state?.photoshowLightbox) window.history.back();
+    if (window.history.state?.crossgrainLightbox || window.history.state?.photoshowLightbox)
+      window.history.back();
     else this.#viewPortfolio();
   }
 
   protected render() {
-    const error = this.viewerError || this.moreError;
     const empty = !this.#photos.length;
+    const error = this.viewerError || this.moreError || (!empty && this.initialError);
     return html`<main
       class="gallery"
       aria-label="Photographs"
-      aria-busy=${String(!this.current && !this.initialError)}
+      aria-busy=${String(this.initialLoading || this.loadingMore)}
       @photo-open=${this.#openPhoto}
       @photo-next=${this.#nextPhoto}
       @photo-previous=${this.#previousPhoto}
       @photo-close=${this.#closePhoto}
     >
-      <h1 class="gallery-title" ?hidden=${!this.current}
-        >${this.current ? `${this.current.identity.handle}’s photography` : ''}</h1
+      <header class="gallery-heading" ?hidden=${!this.current}>
+        <h1 class="gallery-title"
+          >${this.current ? html`${this.profileUrl ? html`<a href=${this.profileUrl} target="_blank" rel="noopener noreferrer">${this.current.identity.handle}</a>` : this.current.identity.handle}’s photography` : nothing}</h1
+        >
+        <p class="site-credit gallery-copyright">© ${new Date().getFullYear()}</p>
+      </header>
+      <p class="site-credit gallery-credit" ?hidden=${!this.current}>
+        <a
+          href=${galleryPath('')}
+          @click=${(event: MouseEvent) => {
+            if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+              return;
+            event.preventDefault();
+            this.#home();
+          }}
+          >Want your own?</a
+        >
+      </p>
+      <div
+        class="gallery-state"
+        ?hidden=${!empty || this.initialLoading}
+        role=${this.initialError ? nothing : 'status'}
       >
-      <div class="gallery-state" ?hidden=${!empty} role=${this.initialError ? nothing : 'status'}>
         ${
           this.initialError
             ? html`<p role="alert">${this.initialError}</p>
@@ -322,10 +393,13 @@ export class PhotoGallery extends PhotoElement {
                 </div>`
             : this.current && !this.current.cursor
               ? html`No public Grain photos.<button @click=${this.#home}>Change account</button>`
-              : 'Loading photos…'
+              : nothing
         }
       </div>
-      <photo-masonry variant="galleries" ?hidden=${empty}
+      <photo-masonry
+        variant="galleries"
+        ?pending=${this.initialLoading || !!this.current?.cursor}
+        ?hidden=${empty}
         >${repeat(
           this.#groups,
           (group) => group.id,
@@ -338,15 +412,16 @@ export class PhotoGallery extends PhotoElement {
         aria-hidden="true"
         ?hidden=${!this.current?.cursor}
       ></div>
-      <div class="pagination-status" ?hidden=${!error && !this.loadingMore}>
+      <div class="pagination-status" ?hidden=${!error}>
         ${
           error
             ? html`<p role="alert">${error}</p>
-                <button @click=${this.viewerError ? () => this.#start(true) : this.loadMore}
+                <button
+                  @click=${this.viewerError || this.initialError ? () => this.#start(true) : this.loadMore}
                   >Retry</button
                 >
                 ${this.viewerError && window.location.hash ? html`<button @click=${this.#viewPortfolio}>View portfolio</button>` : nothing}`
-            : html`<p role="status">Loading photos…</p>`
+            : nothing
         }
       </div>
       ${this.viewerReady ? html`<photo-lightbox ${ref(this.#lightbox)}></photo-lightbox>` : nothing}

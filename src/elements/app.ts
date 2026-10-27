@@ -1,11 +1,14 @@
 import { html, nothing } from 'lit';
 import { keyed } from 'lit/directives/keyed.js';
 import { normalizeActor } from '../lib/actor.ts';
-import { actorFromPath, galleryPath } from '../lib/routes.ts';
+import { actorFromPath, galleryPath, restorePageRoute } from '../lib/routes.ts';
 import { loadTypography } from '../ui/typography.ts';
+import { setFavicon } from '../ui/favicon.ts';
 import { PhotoElement } from '../ui/element.ts';
 
-export class PhotoshowApp extends PhotoElement {
+const typography = loadTypography();
+
+export class CrossgrainApp extends PhotoElement {
   static properties = {
     actor: { state: true },
     ready: { state: true },
@@ -30,6 +33,11 @@ export class PhotoshowApp extends PhotoElement {
   }
   connectedCallback() {
     super.connectedCallback();
+    this.inert = true;
+    void typography.then(() => {
+      this.inert = false;
+      this.setAttribute('fonts-ready', '');
+    });
     window.addEventListener('popstate', this.#pop);
     void this.#readRoute();
   }
@@ -48,11 +56,12 @@ export class PhotoshowApp extends PhotoElement {
   async #readRoute() {
     const actor = actorFromPath(window.location.pathname);
     if (this.ready && this.querySelector('photo-gallery')?.matchesActor(actor)) return;
+    setFavicon();
     const version = ++this.#version;
     this.actor = actor;
     this.ready = this.routeError = false;
     this.formError = '';
-    document.title = 'Photoshow';
+    document.title = 'crossgrain';
     if (!this.actor) return;
     try {
       await import('./gallery.ts');
@@ -82,40 +91,47 @@ export class PhotoshowApp extends PhotoElement {
               @gallery-home=${() => this.navigate('')}
             ></photo-gallery>`,
           )
-        : html`<main class="gallery">
-            <p class="gallery-state" role=${this.routeError ? 'alert' : 'status'}>
-              ${this.routeError ? html`Couldn’t load the gallery. Please try again.<button @click=${this.#pop}>Retry</button>` : 'Loading photos…'}
-            </p>
+        : html`<main class="gallery" aria-label="Photographs" aria-busy=${String(!this.routeError)}>
+            ${this.routeError ? html`<p class="gallery-state" role="alert">Couldn’t load the gallery. Please try again.<button @click=${this.#pop}>Retry</button></p>` : nothing}
           </main>`;
-    return html`<main class="home">
-      <form class="handle-form" novalidate @submit=${this.#submit}>
-        <label for="handle" class="sr-only">Your Grain handle or DID</label>
-        <div class="handle-input">
-          <input
-            id="handle"
-            placeholder="your handle here"
-            autocapitalize="none"
-            autocorrect="off"
-            spellcheck="false"
-            aria-invalid=${String(!!this.formError)}
-            aria-describedby=${this.formError ? 'handle-error' : nothing}
-            @input=${() => {
-              this.formError = '';
-            }}
-          />
-          <button type="submit">Open</button>
-        </div>
-        <p id="handle-error" class="form-error" role="alert" ?hidden=${!this.formError}>
-          ${this.formError}
-        </p>
-      </form>
-    </main>`;
+    return html`<div class="home-page"
+      ><main class="home">
+        <form class="handle-form" novalidate @submit=${this.#submit}>
+          <label for="handle" class="sr-only">Your Grain handle or DID</label>
+          <div class="handle-input">
+            <input
+              id="handle"
+              placeholder="your handle here"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              aria-invalid=${String(!!this.formError)}
+              aria-describedby=${this.formError ? 'handle-error' : nothing}
+              @input=${() => {
+                this.formError = '';
+              }}
+            />
+            <button type="submit">Open</button>
+          </div>
+          <p id="handle-error" class="form-error" role="alert" ?hidden=${!this.formError}>
+            ${this.formError}
+          </p>
+        </form>
+      </main>
+      <footer class="site-credit home-credit">
+        © ${new Date().getFullYear()} geesawra ·
+        <a href="https://github.com/geesawra/crossgrain" target="_blank" rel="noopener noreferrer"
+          >GitHub</a
+        >
+      </footer>
+    </div>`;
   }
 }
 
-void loadTypography().then(() => customElements.define('photo-show', PhotoshowApp));
+restorePageRoute();
+customElements.define('crossgrain-app', CrossgrainApp);
 declare global {
   interface HTMLElementTagNameMap {
-    'photo-show': PhotoshowApp;
+    'crossgrain-app': CrossgrainApp;
   }
 }

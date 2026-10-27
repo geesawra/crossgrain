@@ -67,6 +67,7 @@ export interface Identity {
   did: string;
   pds: string;
   handle: string;
+  bluesky?: { avatar?: string } | null;
 }
 export interface PhotoGroup {
   id: string;
@@ -293,6 +294,7 @@ export async function loadPortfolioPage(
   identity: Identity,
   cursor: string | undefined,
   signal: AbortSignal,
+  onProgress?: (photos: Photo[]) => void,
 ): Promise<PortfolioPage> {
   const params = new URLSearchParams({
     repo: identity.did,
@@ -319,22 +321,35 @@ export async function loadPortfolioPage(
     )
   )
     throw new GalleryError('The returned galleries don’t belong to this account.');
-  const galleries = await Promise.all(
-    page.records.map((record) => loadGallery(identity, record, signal)),
-  );
-  const photos = [...new Map(galleries.flat().map((photo) => [photo.id, photo])).values()];
-  photos.sort((a, b) => dateValue(b.publishedAt) - dateValue(a.publishedAt));
-  return { photos, cursor: page.cursor || undefined };
+  const galleries: Photo[][] = [];
+  const photos = () =>
+    [...new Map(galleries.flat().map((photo) => [photo.id, photo])).values()].sort(
+      (a, b) => dateValue(b.publishedAt) - dateValue(a.publishedAt),
+    );
+  let active = true;
+  try {
+    await Promise.all(
+      page.records.map(async (record, index) => {
+        galleries[index] = await loadGallery(identity, record, signal);
+        if (active && !signal.aborted) onProgress?.(photos());
+      }),
+    );
+  } finally {
+    active = false;
+  }
+  return { photos: photos(), cursor: page.cursor || undefined };
 }
 
 export async function loadPortfolio(
   actor: string,
   signal: AbortSignal,
   gallery?: string,
+  onProgress?: (data: Portfolio) => void,
 ): Promise<Portfolio> {
   if (gallery !== undefined && !validRecordKey(gallery))
     throw new GalleryError('This photo link is incomplete or invalid.');
   const identity = await resolveIdentity(actor, signal);
+  onProgress?.({ identity, photos: [], seenCursors: [] });
   let page: PortfolioPage;
   if (gallery) {
     const record = await getJson<RecordEntry<GalleryRecord>>(
@@ -348,7 +363,10 @@ export async function loadPortfolio(
     )
       throw new GalleryError('The returned gallery doesn’t belong to this photo link.');
     page = { photos: await loadGallery(identity, record, signal) };
-  } else page = await loadPortfolioPage(identity, undefined, signal);
+  } else
+    page = await loadPortfolioPage(identity, undefined, signal, (photos) =>
+      onProgress?.({ identity, photos, seenCursors: [] }),
+    );
   return { identity, ...page, seenCursors: page.cursor ? [page.cursor] : [] };
 }
 

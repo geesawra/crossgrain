@@ -21,7 +21,7 @@ export function actorFromPath(pathname: string, base = siteBase): string {
 export function restorePageRoute(base = siteBase) {
   const root = new URL(base.endsWith('/') ? base : `${base}/`, window.location.origin);
   if (window.location.pathname !== root.pathname) return;
-  const saved = new URLSearchParams(window.location.search).get('__photoshow_route');
+  const saved = new URLSearchParams(window.location.search).get('__crossgrain_route');
   if (!saved) return;
   try {
     const target = new URL(saved, root);

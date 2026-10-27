@@ -345,6 +345,81 @@ describe('progressive metadata loading', () => {
     assert.equal(requests.filter((url) => url.hostname === 'grain.social').length, 1);
     assert(!requests.some((url) => url.searchParams.has('cursor')));
   });
+  it('reports the identity immediately and each completed gallery before the whole batch finishes', async () => {
+    mockRepository();
+    const fetchRecord = globalThis.fetch;
+    let release!: () => void;
+    let observed!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      observed = resolve;
+    });
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/com.atproto.repo.listRecords')) {
+        const response = await fetchRecord(input, init);
+        const page = await response.json();
+        return json({
+          ...page,
+          records: [...page.records, entry(`${galleryUri}-2`, { title: 'Gallery 2' })],
+        });
+      }
+      if (url.hostname === 'grain.social' && url.searchParams.get('gallery')?.endsWith('-2'))
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      return fetchRecord(input, init);
+    };
+    const snapshots: number[] = [];
+    const loading = loadPortfolio(TEST_DID, new AbortController().signal, undefined, (data) => {
+      assert.equal(data.identity.did, TEST_DID);
+      assert.equal(data.cursor, undefined, 'Do not expose the next page before this one finishes');
+      snapshots.push(data.photos.length);
+      if (data.photos.length === 1) observed();
+    });
+    await completed;
+    assert.deepEqual(snapshots, [0, 1]);
+    release();
+    const portfolio = await loading;
+    assert.deepEqual(snapshots, [0, 1, 2]);
+    assert.equal(portfolio.cursor, 'page2');
+  });
+  it('stops partial updates after a batch fails, even if another response arrives later', async () => {
+    mockRepository();
+    const fetchRecord = globalThis.fetch;
+    let release!: () => void;
+    let finished!: () => void;
+    const late = new Promise<void>((resolve) => {
+      finished = resolve;
+    });
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/com.atproto.repo.listRecords'))
+        return json({
+          records: [1, 2].map((n) => entry(`${galleryUri}-${n}`, { title: `Gallery ${n}` })),
+        });
+      if (url.hostname === 'grain.social') {
+        if (url.searchParams.get('gallery')?.endsWith('-1')) return json({}, 503);
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const response = await fetchRecord(input, init);
+        finished();
+        return response;
+      }
+      return fetchRecord(input, init);
+    };
+    const snapshots: unknown[] = [];
+    await assert.rejects(
+      loadPortfolioPage(identity, undefined, new AbortController().signal, (data) => {
+        snapshots.push(data);
+      }),
+      /503/,
+    );
+    release();
+    await late;
+    await new Promise(setImmediate);
+    assert.deepEqual(snapshots, []);
+  });
   it('loads a linked gallery directly without listing or paging through the portfolio', async () => {
     const requests = mockRepository();
     const portfolio = await loadPortfolio(TEST_DID, new AbortController().signal, 'gallery1-2');
