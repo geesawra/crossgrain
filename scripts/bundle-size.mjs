@@ -51,5 +51,5 @@ console.table({
 });
 
 // Bound each route's cost, including the optional lookup and lightbox chunks.
-if (home.gzip > 10_000 || lookup.gzip > 12_000 || gallery.gzip > 19_250 || complete.gzip > 24_000)
+if (home.gzip > 10_500 || lookup.gzip > 12_500 || gallery.gzip > 20_000 || complete.gzip > 25_000)
   throw new Error('The client JavaScript exceeded its size budget.');

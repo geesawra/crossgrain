@@ -19,11 +19,14 @@ import { galleryLoading } from '../ui/loading.ts';
 import './group.ts';
 import type { PhotoLightbox } from './lightbox.ts';
 
+import { readViewSettings, viewSettingsSearch, type ViewSettings } from '../lib/view-settings.ts';
+
 const portfolioCache = new Map<string, { data: Portfolio; time: number }>();
 
 export class PhotoGallery extends PhotoElement {
   static properties = {
     actor: { attribute: false },
+    settings: { attribute: false },
     current: { state: true },
     initialError: { state: true },
     loadingMore: { state: true },
@@ -35,6 +38,7 @@ export class PhotoGallery extends PhotoElement {
     profileUrl: { state: true },
   };
   declare actor: string;
+  declare settings: ViewSettings;
   declare private current?: Portfolio;
   declare private initialError: string;
   declare private loadingMore: boolean;
@@ -69,6 +73,7 @@ export class PhotoGallery extends PhotoElement {
   constructor() {
     super();
     this.actor = '';
+    this.settings = readViewSettings(window.location.search);
     this.initialError = this.moreError = this.viewerError = '';
     this.loadingMore = this.viewerReady = false;
     this.activeId = null;
@@ -97,6 +102,10 @@ export class PhotoGallery extends PhotoElement {
       this.#observeMore();
     this.#updateLightbox();
   }
+  #galleryPath(actor: string) {
+    return galleryPath(actor) + viewSettingsSearch(this.settings);
+  }
+
   #home() {
     this.dispatchEvent(new Event('gallery-home', { bubbles: true }));
   }
@@ -200,7 +209,7 @@ export class PhotoGallery extends PhotoElement {
       portfolioCache.set(this.#cacheKey(data.identity.did), cached);
     }
     document.title = `${data.identity.handle}’s photography — crossgrain`;
-    const path = galleryPath(data.identity.did) + window.location.hash;
+    const path = this.#galleryPath(data.identity.did) + window.location.hash;
     if (window.location.pathname + window.location.search + window.location.hash !== path)
       window.history.replaceState(window.history.state, '', path);
   }
@@ -285,7 +294,11 @@ export class PhotoGallery extends PhotoElement {
     }
   }
   #viewPortfolio() {
-    window.history.replaceState({}, '', galleryPath(this.current?.identity.did || this.actor));
+    window.history.replaceState(
+      {},
+      '',
+      this.#galleryPath(this.current?.identity.did || this.actor),
+    );
     this.#routeHash = '';
     void this.#start();
   }
@@ -294,9 +307,9 @@ export class PhotoGallery extends PhotoElement {
   }
   async #selectPhoto(photo: Photo) {
     const did = this.current!.identity.did;
-    const path = photoPath(did, photo);
+    const path = photoPath(did, photo).replace('#', viewSettingsSearch(this.settings) + '#');
     if (!window.history.state?.crossgrainLightbox && !window.history.state?.photoshowLightbox) {
-      window.history.replaceState(window.history.state, '', galleryPath(did));
+      window.history.replaceState(window.history.state, '', this.#galleryPath(did));
       window.history.pushState({ crossgrainLightbox: true }, '', path);
     } else window.history.replaceState(window.history.state, '', path);
     this.#routeHash = window.location.hash;
@@ -369,7 +382,7 @@ export class PhotoGallery extends PhotoElement {
       </header>
       <p class="site-credit gallery-credit" ?hidden=${!this.current}>
         <a
-          href=${galleryPath('')}
+          href=${this.#galleryPath('')}
           @click=${(event: MouseEvent) => {
             if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
               return;
@@ -399,14 +412,34 @@ export class PhotoGallery extends PhotoElement {
         }
       </div>
       <photo-masonry
-        variant="galleries"
+        variant=${this.settings.groups ? 'galleries' : nothing}
+        columns=${!this.settings.captions && !this.settings.details && !this.settings.groups ? this.settings.columns : nothing}
         ?pending=${this.initialLoading || !!this.current?.cursor}
         ?hidden=${empty}
-        >${repeat(
-          this.#groups,
-          (group) => group.id,
-          (group) => html` <photo-group .group=${group} .eagerIds=${this.#eagerIds}></photo-group>`,
-        )}</photo-masonry
+        >${
+          this.settings.groups
+            ? repeat(
+                this.#groups,
+                (group) => group.id,
+                (group) =>
+                  html`<photo-group
+                    .group=${group}
+                    .eagerIds=${this.#eagerIds}
+                    .settings=${this.settings}
+                  ></photo-group>`,
+              )
+            : repeat(
+                this.#photos,
+                (photo) => photo.id,
+                (photo) =>
+                  html`<photo-card
+                    .photo=${photo}
+                    .eager=${this.#eagerIds.has(photo.id)}
+                    .captions=${this.settings.captions}
+                    .details=${this.settings.details}
+                  ></photo-card>`,
+              )
+        }</photo-masonry
       >
       <div
         class="gallery-sentinel"

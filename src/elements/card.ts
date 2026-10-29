@@ -9,15 +9,20 @@ export class PhotoCard extends PhotoElement {
   static properties = {
     photo: { attribute: false },
     eager: { type: Boolean },
+    captions: { type: Boolean },
+    details: { type: Boolean },
     revealed: { state: true },
   };
   declare photo?: Photo;
   declare eager: boolean;
+  declare captions: boolean;
+  declare details: boolean;
   declare private revealed: boolean;
   #image = createRef<PhotoImage>();
   constructor() {
     super();
     this.eager = this.revealed = false;
+    this.captions = this.details = true;
   }
   protected willUpdate(changed: PropertyValues) {
     if (changed.has('photo') && (changed.get('photo') as Photo | undefined)?.id !== this.photo?.id)
@@ -60,10 +65,10 @@ export class PhotoCard extends PhotoElement {
         }
       </div>
       ${
-        photo.caption || metadata
+        (this.captions && photo.caption) || (this.details && metadata)
           ? html`<figcaption>
-              ${photo.caption ? html`<button class="caption" @click=${this.#open}>${photo.caption}</button>` : nothing}
-              ${metadata ? html`<p class="photo-metadata">${metadata}</p>` : nothing}
+              ${this.captions && photo.caption ? html`<button class="caption" @click=${this.#open}>${photo.caption}</button>` : nothing}
+              ${this.details && metadata ? html`<p class="photo-metadata">${metadata}</p>` : nothing}
             </figcaption>`
           : nothing
       }

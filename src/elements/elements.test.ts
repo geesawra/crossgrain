@@ -648,7 +648,8 @@ describe('Lit app and paged galleries', () => {
     const app = dom.document.createElement('crossgrain-app');
     dom.document.body.append(app);
     await tick();
-    assert.equal(app.querySelectorAll('input').length, 1);
+    assert.equal(app.querySelectorAll('input:not([type=checkbox])').length, 1);
+    assert.equal(app.querySelectorAll('input[type=checkbox]:checked').length, 3);
     assert.equal(app.querySelector('input')?.placeholder, 'jcsalterego.bsky.social');
     assert.equal(app.querySelectorAll('img, nav, header').length, 0);
     assert.equal(calls, 0);
@@ -657,6 +658,65 @@ describe('Lit app and paged galleries', () => {
     assert.equal(app.querySelector('input')?.getAttribute('aria-invalid'), 'true');
     assert.equal(calls, 0);
   });
+  it('stores home choices only in URLs and carries them through gallery and photo navigation', async () => {
+    const api = repository();
+    const app = dom.document.createElement('crossgrain-app');
+    dom.document.body.append(app);
+    await tick();
+    for (const checkbox of app.querySelectorAll<HTMLInputElement>('input[type=checkbox]')) {
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    await tick();
+    const columns = app.querySelector('select')!;
+    assert.deepEqual(
+      [...columns.options].map((option) => option.value),
+      ['2', '3', '4'],
+    );
+    columns.value = '4';
+    columns.dispatchEvent(new Event('change', { bubbles: true }));
+    const search = '?captions=0&details=0&groups=0&columns=4';
+    assert.equal(dom.location.search, search);
+    app.querySelector<HTMLInputElement>('#handle')!.value = api.handle;
+    app.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+    await until(() => app.querySelectorAll('photo-card').length === 2);
+    assert.equal(dom.location.search, search);
+    assert.equal(app.querySelectorAll('photo-group, figcaption').length, 0);
+    const masonry = app.querySelector('photo-masonry')!;
+    assert.equal(masonry.getAttribute('columns'), '4');
+    Object.defineProperty(masonry, 'clientWidth', { configurable: true, value: 1000 });
+    masonry.layout();
+    assert.equal((masonry.firstElementChild as HTMLElement).style.width, '235px');
+    app.querySelector<HTMLElement>('.photo-open')!.click();
+    await until(() => app.querySelector<HTMLDialogElement>('dialog')?.open);
+    assert.equal(dom.location.search, search);
+    assert.ok(app.querySelector('.lightbox-caption')?.textContent?.trim());
+    app.navigate('');
+    await tick();
+    assert.equal(app.querySelectorAll('input[type=checkbox]:checked').length, 0);
+    assert.equal(app.querySelector('select')?.value, '4');
+    const checkbox = app.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    await tick();
+    assert.equal(app.querySelector('select'), null);
+  });
+
+  it('reads shared URL choices independently and updates the same gallery on popstate', async () => {
+    const api = repository();
+    dom.history.replaceState({}, '', `/${api.handle}?captions=0`);
+    const app = dom.document.createElement('crossgrain-app');
+    dom.document.body.append(app);
+    await until(() => app.querySelector('photo-card'));
+    assert.equal(app.querySelectorAll('.caption').length, 0);
+    assert.ok(app.querySelector('photo-group'));
+    dom.history.replaceState({}, '', dom.location.pathname + '?details=0&groups=0');
+    dom.dispatchEvent(new Event('popstate'));
+    await until(() => !app.querySelector('photo-group'));
+    assert.ok(app.querySelector('.caption'));
+    assert.equal(app.querySelectorAll('.photo-metadata').length, 0);
+  });
+
   it('opens a handle, canonicalizes the DID URL, and adds the photography title', async () => {
     const api = repository();
     const app = dom.document.createElement('crossgrain-app');

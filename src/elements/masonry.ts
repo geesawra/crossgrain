@@ -1,5 +1,5 @@
 export class PhotoMasonry extends HTMLElement {
-  static observedAttributes = ['pending'];
+  static observedAttributes = ['pending', 'variant', 'columns'];
   #observer?: ResizeObserver;
   #childrenObserver?: MutationObserver;
   #items = new Set<Element>();
@@ -50,13 +50,17 @@ export class PhotoMasonry extends HTMLElement {
     const width = this.clientWidth;
     if (!this.isConnected || !width) return;
     const galleries = this.getAttribute('variant') === 'galleries';
-    const columns = galleries
-      ? width < 1000 || (this.children.length === 1 && !this.hasAttribute('pending'))
-        ? 1
-        : 2
-      : width < 440
-        ? 1
-        : 2;
+    const requested = Number(this.getAttribute('columns'));
+    const columns =
+      !galleries && [2, 3, 4].includes(requested)
+        ? requested
+        : galleries
+          ? width < 1000 || (this.children.length === 1 && !this.hasAttribute('pending'))
+            ? 1
+            : 2
+          : width < 440
+            ? 1
+            : 2;
     const gap = galleries ? 40 : width < 580 ? 12 : 20;
     const bottomGap = galleries ? 56 : gap + 8;
     const cardWidth = (width - (columns - 1) * gap) / columns;

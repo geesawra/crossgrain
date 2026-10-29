@@ -7,16 +7,20 @@ import { setFavicon } from '../ui/favicon.ts';
 import { PhotoElement } from '../ui/element.ts';
 import { galleryLoading } from '../ui/loading.ts';
 
+import { readViewSettings, viewSettingsSearch, type ViewSettings } from '../lib/view-settings.ts';
+
 const typography = loadTypography();
 
 export class CrossgrainApp extends PhotoElement {
   static properties = {
     actor: { state: true },
+    settings: { state: true },
     ready: { state: true },
     routeError: { state: true },
     formError: { state: true },
   };
   declare private actor: string;
+  declare private settings: ViewSettings;
   declare private ready: boolean;
   declare private routeError: boolean;
   declare private formError: string;
@@ -28,6 +32,7 @@ export class CrossgrainApp extends PhotoElement {
   constructor() {
     super();
     this.actor = '';
+    this.settings = readViewSettings(window.location.search);
     this.ready = false;
     this.routeError = false;
     this.formError = '';
@@ -49,13 +54,14 @@ export class CrossgrainApp extends PhotoElement {
   }
 
   navigate(actor: string) {
-    window.history.pushState({}, '', galleryPath(actor));
+    window.history.pushState({}, '', galleryPath(actor) + viewSettingsSearch(this.settings));
     window.scrollTo({ top: 0, behavior: 'instant' });
     void this.#readRoute();
   }
 
   async #readRoute() {
     const actor = actorFromPath(window.location.pathname);
+    this.settings = readViewSettings(window.location.search);
     if (this.ready && this.querySelector('photo-gallery')?.matchesActor(actor)) return;
     setFavicon();
     const version = ++this.#version;
@@ -82,6 +88,19 @@ export class CrossgrainApp extends PhotoElement {
     }
   }
 
+  #setView(key: 'captions' | 'details' | 'groups', event: Event) {
+    this.#updateSettings({ ...this.settings, [key]: (event.target as HTMLInputElement).checked });
+  }
+
+  #updateSettings(settings: ViewSettings) {
+    this.settings = settings;
+    window.history.replaceState(
+      window.history.state,
+      '',
+      window.location.pathname + viewSettingsSearch(this.settings) + window.location.hash,
+    );
+  }
+
   #loadSearch() {
     void import('./actor-search.ts').catch(() => {
       /* Direct handle and DID entry still works if the lookup cannot load. */
@@ -95,6 +114,7 @@ export class CrossgrainApp extends PhotoElement {
             this.actor,
             html`<photo-gallery
               .actor=${this.actor}
+              .settings=${this.settings}
               @gallery-home=${() => this.navigate('')}
             ></photo-gallery>`,
           )
@@ -133,6 +153,45 @@ export class CrossgrainApp extends PhotoElement {
             >A gallery viewer for your grain.social photos. Enter your Atmosphere handle or DID to
             open your gallery.</p
           >
+          <fieldset class="view-settings">
+            <legend>Gallery view</legend>
+            ${(
+              [
+                ['captions', 'Show captions'],
+                ['details', 'Show technical details'],
+                ['groups', 'Group photos by gallery'],
+              ] as const
+            ).map(
+              ([key, label]) =>
+                html`<label>
+                  <input
+                    type="checkbox"
+                    .checked=${this.settings[key]}
+                    @change=${(event: Event) => this.#setView(key, event)}
+                  />
+                  ${label}
+                </label>`,
+            )}
+            ${
+              !this.settings.captions && !this.settings.details && !this.settings.groups
+                ? html`<label
+                    >Columns
+                    <select
+                      .value=${String(this.settings.columns)}
+                      @change=${(event: Event) =>
+                        this.#updateSettings({
+                          ...this.settings,
+                          columns: Number((event.target as HTMLSelectElement).value),
+                        })}
+                    >
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                    </select>
+                  </label>`
+                : nothing
+            }
+          </fieldset>
           <p id="handle-error" class="form-error" role="alert" ?hidden=${!this.formError}>
             ${this.formError}
           </p>

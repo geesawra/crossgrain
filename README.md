@@ -25,3 +25,7 @@ The self-hosted fonts use the SIL Open Font License 1.1:
 
 - [Atkinson Hyperlegible Next](https://github.com/googlefonts/atkinson-hyperlegible-next) — [license](public/fonts/OFL.txt).
 - [Atkinson Hyperlegible Mono](https://github.com/googlefonts/atkinson-hyperlegible-next-mono) — [license](public/fonts/atkinson-hyperlegible-mono/OFL.txt).
+
+The home page offers independent controls for captions, technical details, and gallery grouping. Uncheck grouping for a continuous photo layout. Choices are saved only in the URL (for example, `?captions=0&details=0&groups=0`) and travel with shared links. All options default to enabled; the lightbox always shows its usual information.
+
+With all three options unchecked, choose 2, 3, or 4 columns. The column count also travels in the URL, using `columns=3` or `columns=4` (the default is 2).

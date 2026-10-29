@@ -1,5 +1,6 @@
 import { html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
+import { readViewSettings, type ViewSettings } from '../lib/view-settings.ts';
 import type { PhotoGroup } from '../lib/grain.ts';
 import { formatDate } from '../lib/grain.ts';
 import { PhotoElement } from '../ui/element.ts';
@@ -7,12 +8,18 @@ import './card.ts';
 import './masonry.ts';
 
 export class GalleryGroup extends PhotoElement {
-  static properties = { group: { attribute: false }, eagerIds: { attribute: false } };
+  static properties = {
+    settings: { attribute: false },
+    group: { attribute: false },
+    eagerIds: { attribute: false },
+  };
   declare group?: PhotoGroup;
+  declare settings: ViewSettings;
   declare eagerIds: ReadonlySet<string>;
   constructor() {
     super();
     this.eagerIds = new Set();
+    this.settings = readViewSettings('');
   }
   connectedCallback() {
     super.connectedCallback();
@@ -42,7 +49,12 @@ export class GalleryGroup extends PhotoElement {
           group.photos,
           (photo) => photo.id,
           (photo) =>
-            html` <photo-card .photo=${photo} .eager=${this.eagerIds.has(photo.id)}></photo-card>`,
+            html` <photo-card
+              .photo=${photo}
+              .captions=${this.settings.captions}
+              .details=${this.settings.details}
+              .eager=${this.eagerIds.has(photo.id)}
+            ></photo-card>`,
         )}
       </photo-masonry>`;
   }
